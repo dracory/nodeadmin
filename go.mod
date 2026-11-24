@@ -6,8 +6,8 @@ require (
 	github.com/dracory/cdn v1.13.0
 	github.com/dracory/entitystore v1.24.0
 	github.com/dracory/hb v1.88.0
-	github.com/dracory/nodebase v0.2.0
-	github.com/dracory/noderun v0.0.0
+	github.com/dracory/nodebase v0.2.1
+	github.com/dracory/noderun v0.1.0
 	github.com/dracory/nodestore v0.2.0
 	github.com/gouniverse/api v1.6.0
 	golang.org/x/crypto v0.57.0
@@ -50,5 +50,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-replace github.com/dracory/noderun => ../noderun
