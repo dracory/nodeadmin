@@ -8,7 +8,7 @@ require (
 	github.com/dracory/hb v1.88.0
 	github.com/dracory/neat v0.61.0
 	github.com/dracory/nodebase v0.4.0
-	github.com/dracory/noderun v0.1.0
+	github.com/dracory/noderun v0.2.0
 	github.com/dracory/nodestore v0.2.0
 	github.com/gouniverse/api v1.6.0
 	golang.org/x/crypto v0.57.0
