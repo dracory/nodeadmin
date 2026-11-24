@@ -65,6 +65,5 @@ func (s *Section) Workflows(w http.ResponseWriter, r *http.Request) {
 	s.uiConfig.Layout(w, r, "Workflows", htmlOut, shared.LayoutOptions{
 		Store:     s.uiConfig.Store,
 		StyleURLs: []string{cdn.BootstrapIconsCss_1_13_1()},
-		Scripts:   []string{shared.MountAppJS},
 	})
 }

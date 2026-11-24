@@ -107,7 +107,6 @@ func (s *Section) Home(w http.ResponseWriter, r *http.Request) {
 		Store:     s.uiConfig.Store,
 		Styles:    []string{dashboardCSS},
 		StyleURLs: []string{cdn.BootstrapIconsCss_1_13_1()},
-		Scripts:   []string{shared.MountAppJS},
 	})
 }
 

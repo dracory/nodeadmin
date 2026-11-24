@@ -41,15 +41,18 @@ func newTestStore(t *testing.T) nodestore.StoreInterface {
 }
 
 // testConfig returns a UiConfig whose layout writes the fragment to
-// the response (mirroring nodeadmin's render wrapper).
-func testConfig(store nodestore.StoreInterface) shared.UiConfig {
+// the response (mirroring nodeadmin's render wrapper) and records the
+// LayoutOptions it was handed so tests can assert on emitted assets.
+func testConfig(store nodestore.StoreInterface) (shared.UiConfig, *shared.LayoutOptions) {
+	captured := &shared.LayoutOptions{}
 	return shared.UiConfig{
 		Store: store,
 		Layout: func(w http.ResponseWriter, r *http.Request, title, html string, options shared.LayoutOptions) string {
+			*captured = options
 			_, _ = w.Write([]byte(html))
 			return ""
 		},
-	}
+	}, captured
 }
 
 // TestHome renders the dashboard section: stat counts, the workflow
@@ -69,7 +72,8 @@ func TestHome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	section := UI(testConfig(store))
+	cfg, _ := testConfig(store)
+	section := UI(cfg)
 	req := httptest.NewRequest(http.MethodGet, "/?controller=home", nil)
 	rec := httptest.NewRecorder()
 	section.Home(rec, req)
@@ -91,9 +95,32 @@ func TestHome(t *testing.T) {
 	}
 }
 
+// TestHomeNoVueMountScript is a regression guard for the
+// "Vue is not defined" console error: the dashboard never loads Vue,
+// so it must not emit a Vue-dependent mount script either.
+func TestHomeNoVueMountScript(t *testing.T) {
+	cfg, opts := testConfig(newTestStore(t))
+	section := UI(cfg)
+	req := httptest.NewRequest(http.MethodGet, "/?controller=home", nil)
+	rec := httptest.NewRecorder()
+	section.Home(rec, req)
+
+	for _, u := range opts.ScriptURLs {
+		if strings.Contains(u, "vue") {
+			t.Fatalf("home must not load Vue: %s", u)
+		}
+	}
+	for _, s := range opts.Scripts {
+		if strings.Contains(s, "Vue") || strings.Contains(s, "createApp") {
+			t.Fatalf("home must not emit a Vue mount script: %s", s)
+		}
+	}
+}
+
 // TestHomeEmpty covers the empty-state rows.
 func TestHomeEmpty(t *testing.T) {
-	section := UI(testConfig(newTestStore(t)))
+	cfg, _ := testConfig(newTestStore(t))
+	section := UI(cfg)
 	req := httptest.NewRequest(http.MethodGet, "/?controller=home", nil)
 	rec := httptest.NewRecorder()
 	section.Home(rec, req)

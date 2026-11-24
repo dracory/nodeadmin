@@ -40,14 +40,16 @@ func newTestStore(t *testing.T) nodestore.StoreInterface {
 	return store
 }
 
-func testConfig(store nodestore.StoreInterface) shared.UiConfig {
+func testConfig(store nodestore.StoreInterface) (shared.UiConfig, *shared.LayoutOptions) {
+	captured := &shared.LayoutOptions{}
 	return shared.UiConfig{
 		Store: store,
 		Layout: func(w http.ResponseWriter, r *http.Request, title, html string, options shared.LayoutOptions) string {
+			*captured = options
 			_, _ = w.Write([]byte(html))
 			return ""
 		},
-	}
+	}, captured
 }
 
 // TestWorkflows renders the workflow list: rows with node/edge counts
@@ -66,7 +68,8 @@ func TestWorkflows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	section := UI(testConfig(store))
+	cfg, _ := testConfig(store)
+	section := UI(cfg)
 	req := httptest.NewRequest(http.MethodGet, "/?controller=workflows", nil)
 	rec := httptest.NewRecorder()
 	section.Workflows(rec, req)
@@ -84,9 +87,32 @@ func TestWorkflows(t *testing.T) {
 	}
 }
 
+// TestWorkflowsNoVueMountScript is a regression guard for the
+// "Vue is not defined" console error: the list page never loads Vue,
+// so it must not emit a Vue-dependent mount script either.
+func TestWorkflowsNoVueMountScript(t *testing.T) {
+	cfg, opts := testConfig(newTestStore(t))
+	section := UI(cfg)
+	req := httptest.NewRequest(http.MethodGet, "/?controller=workflows", nil)
+	rec := httptest.NewRecorder()
+	section.Workflows(rec, req)
+
+	for _, u := range opts.ScriptURLs {
+		if strings.Contains(u, "vue") {
+			t.Fatalf("workflows must not load Vue: %s", u)
+		}
+	}
+	for _, s := range opts.Scripts {
+		if strings.Contains(s, "Vue") || strings.Contains(s, "createApp") {
+			t.Fatalf("workflows must not emit a Vue mount script: %s", s)
+		}
+	}
+}
+
 // TestWorkflowsEmpty covers the empty-state row.
 func TestWorkflowsEmpty(t *testing.T) {
-	section := UI(testConfig(newTestStore(t)))
+	cfg, _ := testConfig(newTestStore(t))
+	section := UI(cfg)
 	req := httptest.NewRequest(http.MethodGet, "/?controller=workflows", nil)
 	rec := httptest.NewRecorder()
 	section.Workflows(rec, req)

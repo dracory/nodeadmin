@@ -55,8 +55,8 @@ func (u *ui) renderPage(w http.ResponseWriter, r *http.Request) {
 	// the fragment would execute `const { createApp } = Vue` while Vue
 	// is still undefined (ReferenceError → the app never mounts and the
 	// page renders raw mustaches). settings.js mounts #app itself —
-	// MountAppJS must NOT run here (it would mount a competing empty
-	// app over the section).
+	// no other mount script may run here (it would mount a competing
+	// empty app over the section).
 	u.config.Layout(w, r, "Settings", page, shared.LayoutOptions{
 		Store:      u.config.Store,
 		StyleURLs:  []string{cdn.BootstrapIconsCss_1_13_1(), cdn.Notiflix_3_2_8_CSS()},

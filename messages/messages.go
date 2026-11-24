@@ -60,6 +60,5 @@ func (s *Section) Messages(w http.ResponseWriter, r *http.Request) {
 	s.uiConfig.Layout(w, r, "Messages", htmlOut, shared.LayoutOptions{
 		Store:     s.uiConfig.Store,
 		StyleURLs: []string{cdn.BootstrapIconsCss_1_13_1()},
-		Scripts:   []string{shared.MountAppJS},
 	})
 }

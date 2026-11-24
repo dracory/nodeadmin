@@ -15,12 +15,3 @@ const (
 	CONTROLLER_EDITOR    = "editor"
 	CONTROLLER_SETTINGS  = "settings"
 )
-
-// MountAppJS mounts the shared app-navigation chrome — every section
-// page passes it via LayoutOptions.Scripts so the navbar renders
-// (the shell layout emits <app-navigation> inside #app)
-const MountAppJS = `// Node admin Vue app — mounts the shared app-navigation chrome.
-const { createApp } = Vue;
-const app = createApp({});
-app.component('app-navigation', window.AppNavigation);
-app.mount('#app');`

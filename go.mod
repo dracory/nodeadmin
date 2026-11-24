@@ -10,7 +10,9 @@ require (
 	github.com/dracory/nodebase v0.4.0
 	github.com/dracory/noderun v0.2.0
 	github.com/dracory/nodestore v0.2.0
+	github.com/go-rod/rod v0.116.2
 	github.com/gouniverse/api v1.6.0
+	github.com/stretchr/testify v1.12.1
 	golang.org/x/crypto v0.57.0
 	modernc.org/sqlite v1.63.0
 )
@@ -40,6 +42,12 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/samber/lo v1.53.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
+	github.com/ysmood/fetchup v0.2.3 // indirect
+	github.com/ysmood/goob v0.4.0 // indirect
+	github.com/ysmood/got v0.40.0 // indirect
+	github.com/ysmood/gson v0.7.3 // indirect
+	github.com/ysmood/leakless v0.9.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
