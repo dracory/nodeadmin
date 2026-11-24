@@ -327,7 +327,9 @@ func newWindowsBrowser(t *testing.T, bin string) *browser {
 	require.NotEmpty(t, wsURL, "browser devtools endpoint never came up")
 
 	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(context.Background(), wsURL)
-	browserCtx, _ := chromedp.NewContext(allocCtx)
+	browserCtx, _ := chromedp.NewContext(allocCtx,
+		chromedp.WithBrowserOption(chromedp.WithBrowserDebugf(
+			func(s string, a ...any) { fmt.Printf("CDP "+s+"\n", a...) })))
 	require.NoError(t, chromedp.Run(browserCtx))
 	return &browser{browserCtx: browserCtx, allocatorCancel: cancelAlloc}
 }
@@ -415,9 +417,10 @@ func eval(ctx context.Context, expr string, out any) error {
 	return chromedp.Run(ctx, chromedp.Evaluate(expr, out))
 }
 
-func evalBool(ctx context.Context, expr string) bool {
+func evalBool(t *testing.T, ctx context.Context, expr string) bool {
 	var v bool
 	if err := eval(ctx, expr, &v); err != nil {
+		t.Logf("evalBool error: %v", err)
 		return false
 	}
 	return v
@@ -449,7 +452,7 @@ func waitElementText(t *testing.T, ctx context.Context, sel, text string) {
 	expr := `[...document.querySelectorAll(` + js(sel) + `)]` +
 		`.some(e => (e.innerText||'').toLowerCase().includes(` + js(strings.ToLower(text)) + `))`
 	for time.Now().Before(deadline) {
-		if evalBool(ctx, expr) {
+		if evalBool(t, ctx, expr) {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -478,7 +481,7 @@ func clickText(t *testing.T, ctx context.Context, sel, text string) {
 		`.find(e => (e.innerText||'').trim().toLowerCase() === ` + js(strings.ToLower(text)) + `)`
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		if evalBool(ctx, `!!(`+expr+`)`) {
+		if evalBool(t, ctx, `!!(`+expr+`)`) {
 			require.NoError(t, eval(ctx, `(`+expr+`)?.click()`, nil))
 			return
 		}
@@ -551,7 +554,10 @@ func waitVueApp(t *testing.T, ctx context.Context) {
 		ready := false
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {
-			if evalBool(ctx, expr) {
+			ec, ecancel := context.WithTimeout(ctx, 10*time.Second)
+			ok := evalBool(t, ec, expr)
+			ecancel()
+			if ok {
 				ready = true
 				break
 			}
@@ -560,7 +566,13 @@ func waitVueApp(t *testing.T, ctx context.Context) {
 		if ready {
 			return
 		}
-		_ = chromedp.Run(ctx, chromedp.Reload())
+		// Reload has no internal timeout — bound it so a stalled
+		// load can't wedge the whole suite.
+		rc, rcancel := context.WithTimeout(ctx, 20*time.Second)
+		if err := chromedp.Run(rc, chromedp.Reload()); err != nil {
+			t.Logf("waitVueApp reload: %v", err)
+		}
+		rcancel()
 	}
 	t.Fatal("Vue app never mounted (CDN scripts unavailable after reloads)")
 }

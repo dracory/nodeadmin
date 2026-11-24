@@ -29,7 +29,7 @@ func TestSectionPagesRender(t *testing.T) {
 			// — e.g. Vue mount failures — surface as uncaught
 			// exceptions by then), then a short beat for async work.
 			eventually(t, 15*time.Second, "document readyState complete", func() bool {
-				return evalBool(page, `document.readyState === 'complete'`)
+				return evalBool(t, page, `document.readyState === 'complete'`)
 			})
 			time.Sleep(500 * time.Millisecond)
 			if errs := w.errors(); len(errs) > 0 {
