@@ -5,6 +5,7 @@ package e2e
 import (
 	"testing"
 
+	"github.com/chromedp/chromedp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,18 +21,19 @@ func TestSettingsMountsAndSaves(t *testing.T) {
 	waitVueApp(t, page)
 
 	// Vue mounted and finished loading: the form is visible.
-	page.MustElement("#maxSteps").MustWaitVisible()
+	waitElement(t, page, "#maxSteps")
 
 	// Set a max-steps override and save.
-	page.MustElement("#maxSteps").MustSelectAllText().MustInput("1234")
-	page.MustElementR("button", "Save Changes").MustClick()
+	setInput(t, page, "#maxSteps", "1234")
+	clickText(t, page, "button", "Save Changes")
 
 	// The save roundtrips and reloads the form; assert via a fresh
 	// page load that the override persisted in the config store.
-	page.MustNavigate(srv.browserURL("/?controller=settings"))
+	require.NoError(t, chromedp.Run(page,
+		chromedp.Navigate(srv.browserURL("/?controller=settings"))))
 	waitVueApp(t, page)
-	input := page.MustElement("#maxSteps").MustWaitVisible()
-	require.Equal(t, "1234", input.MustProperty("value").String())
+	waitElement(t, page, "#maxSteps")
+	require.Equal(t, "1234", inputValue(t, page, "#maxSteps"))
 
 	if errs := w.errors(); len(errs) > 0 {
 		t.Fatalf("console errors on settings: %v", errs)

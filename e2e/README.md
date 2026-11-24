@@ -1,8 +1,11 @@
 # E2E browser tests
 
-Driver: **go-rod** (`github.com/go-rod/rod`). Rationale: rod's launcher
-downloads its own Chromium on first run — fully self-contained, no
-system Chrome required (chromedp needs a Chrome binary present).
+Driver: **chromedp** (`github.com/chromedp/chromedp`). chromedp does
+NOT auto-download a browser — a Chrome, Edge, or Chromium binary must
+be present. `NODEADMIN_E2E_BROWSER` points at one explicitly; when
+unset the suite searches PATH (`google-chrome`, `chromium`,
+`microsoft-edge`, …) and common `/mnt/c` Windows install paths, and
+skips if nothing is found.
 
 Run:
 
@@ -34,11 +37,13 @@ at "/"). No manual server, no shared data dir.
 
 ## Environment variables
 
-- `NODEADMIN_E2E_BROWSER` — path to a browser binary; unset uses rod's
-  auto-downloaded Chromium.
+- `NODEADMIN_E2E_BROWSER` — path to a browser binary; unset searches
+  PATH and common install locations (test skipped if none found).
 - `NODEADMIN_E2E_WINDOWS_TMP` — required when the binary is a Windows
   `.exe` under WSL: a WSL path under `/mnt/c` for the browser profile
-  (e.g. `/mnt/c/Temp`).
+  (e.g. `/mnt/c/Temp`). The browser is then spawned on a random debug
+  port with `--headless=new` and chromedp connects via the remote
+  allocator.
 - `NODEADMIN_E2E_HOST` — host the browser uses to reach the test server;
   defaults to `127.0.0.1` (correct under WSL mirrored networking).
   On NAT-mode WSL set it to the VM interface IP (`hostname -I`).

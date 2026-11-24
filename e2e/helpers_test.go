@@ -1,16 +1,18 @@
 //go:build e2e
 
 // Package e2e contains browser-level end-to-end tests for nodeadmin,
-// driven with go-rod (Chromium is downloaded automatically on first
-// run — no system Chrome required). Each test boots its own nodeadmin
-// instance on an httptest server backed by a temporary SQLite file,
-// mirroring the wiring in a host app mount. Run with:
+// driven with chromedp (a Chrome/Edge/Chromium binary must be present —
+// chromedp does not auto-download one; see README.md). Each test boots
+// its own nodeadmin instance on an httptest server backed by a
+// temporary SQLite file, mirroring the wiring in a host app mount.
+// Run with:
 //
 //	go test -tags e2e ./e2e/...
 package e2e
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -21,20 +23,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
-	"runtime"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
 	"github.com/dracory/entitystore"
 	"github.com/dracory/nodeadmin"
 	"github.com/dracory/noderun"
 	"github.com/dracory/nodestore"
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/proto"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
@@ -154,8 +155,16 @@ func apiPost(t *testing.T, base, path string, body any) map[string]any {
 	return envelope.Data
 }
 
+// browser wraps a chromedp browser context. Pages (tabs) are created
+// from browserCtx with chromedp.NewContext; allocatorCancel shuts the
+// browser down (kills the child process for the exec allocator).
+type browser struct {
+	browserCtx      context.Context
+	allocatorCancel context.CancelFunc
+}
+
 var (
-	sharedBrowser     *rod.Browser
+	sharedBrowser     *browser
 	sharedBrowserOnce sync.Once
 	browserCmd        *exec.Cmd // Windows-binary child process, if any
 	browserProfile    string    // its Windows profile dir, for cleanup
@@ -165,7 +174,7 @@ var (
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if sharedBrowser != nil {
-		_ = sharedBrowser.Close()
+		sharedBrowser.allocatorCancel()
 	}
 	if browserProfile != "" {
 		killByProfile(browserProfile)
@@ -175,46 +184,89 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newBrowser returns the suite's shared rod browser, launching it on
+// newBrowser returns the suite's shared browser, launching it on
 // first use. One browser per run keeps Windows-binary spawns (WSL)
 // cheap and avoids port/profile races between tests.
 //
-// By default rod/launcher fetches its own Chromium into the user
-// cache on first run (no system Chrome needed). NODEADMIN_E2E_BROWSER
-// overrides the binary. On WSL a Windows browser ("...msedge.exe"
-// via /mnt/c) also works: it is spawned on a fixed debug port with a
-// Windows-side profile dir — launcher's stderr URL parsing and
-// filepath.Abs profile handling don't survive the Linux/Windows
-// boundary.
-func newBrowser(t *testing.T) *rod.Browser {
+// chromedp has no auto-download: NODEADMIN_E2E_BROWSER must name a
+// browser binary, or one is located on PATH (see findBrowser). With
+// neither, the test is skipped. On WSL a Windows browser
+// ("...msedge.exe" via /mnt/c) also works: it is spawned on a random
+// debug port with a Windows-side profile dir and chromedp connects via
+// the remote allocator.
+func newBrowser(t *testing.T) *browser {
 	sharedBrowserOnce.Do(func() { sharedBrowser = launchBrowser(t) })
 	return sharedBrowser
 }
 
 // launchBrowser performs the actual browser spawn described on
 // newBrowser.
-func launchBrowser(t *testing.T) *rod.Browser {
+func launchBrowser(t *testing.T) *browser {
 	t.Helper()
-	if bin := os.Getenv("NODEADMIN_E2E_BROWSER"); bin != "" &&
-		strings.HasSuffix(strings.ToLower(bin), ".exe") {
+	bin := os.Getenv("NODEADMIN_E2E_BROWSER")
+	if bin != "" && strings.HasSuffix(strings.ToLower(bin), ".exe") {
 		return newWindowsBrowser(t, bin)
 	}
-	l := launcher.New().Headless(true)
-	if bin := os.Getenv("NODEADMIN_E2E_BROWSER"); bin != "" {
-		l = l.Bin(bin)
+	if bin == "" {
+		bin = findBrowser()
 	}
-	u, err := l.Launch()
-	require.NoError(t, err)
-	return rod.New().ControlURL(u).MustConnect()
+	if bin == "" {
+		t.Skip("no Chrome/Edge/Chromium found on PATH; set NODEADMIN_E2E_BROWSER")
+	}
+	return newLocalBrowser(t, bin)
+}
+
+// findBrowser looks for a usable Chrome-family binary on PATH (Linux
+// names plus common /mnt/c Windows locations for WSL without
+// NODEADMIN_E2E_BROWSER set).
+func findBrowser() string {
+	for _, name := range []string{
+		"google-chrome", "google-chrome-stable", "chromium",
+		"chromium-browser", "microsoft-edge", "msedge",
+	} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	for _, p := range []string{
+		"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
+		"/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+		"/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+		"/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe",
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// newLocalBrowser spawns a Linux/native browser via chromedp's exec
+// allocator (headless, temp profile managed by chromedp).
+func newLocalBrowser(t *testing.T, bin string) *browser {
+	t.Helper()
+	// Skip DefaultExecAllocatorOptions[0] (the default ExecPath);
+	// append ours last so they win over the defaults.
+	opts := append(append([]chromedp.ExecAllocatorOption{},
+		chromedp.DefaultExecAllocatorOptions[1:]...),
+		chromedp.ExecPath(bin),
+		chromedp.Flag("headless", "new"),
+	)
+
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
+	browserCtx, _ := chromedp.NewContext(allocCtx)
+	// The first Run on the browser context spawns the process.
+	require.NoError(t, chromedp.Run(browserCtx))
+	return &browser{browserCtx: browserCtx, allocatorCancel: cancelAlloc}
 }
 
 // newWindowsBrowser spawns a Windows Chromium-family browser (Edge or
 // Chrome) — invoked from WSL via interop or natively on Windows — and
-// returns a connected rod browser. NODEADMIN_E2E_WINDOWS_TMP must name
+// returns a connected browser. NODEADMIN_E2E_WINDOWS_TMP must name
 // the profile parent dir (under /mnt/c on WSL: UNC profile paths are
 // ignored by the browser and it would defer to the user's running
 // session); empty falls back to os.TempDir.
-func newWindowsBrowser(t *testing.T, bin string) *rod.Browser {
+func newWindowsBrowser(t *testing.T, bin string) *browser {
 	t.Helper()
 
 	wslTmp := os.Getenv("NODEADMIN_E2E_WINDOWS_TMP")
@@ -231,13 +283,13 @@ func newWindowsBrowser(t *testing.T, bin string) *rod.Browser {
 		// Fresh profile per attempt — a still-shutting-down previous
 		// instance holds the profile lock and the new instance would
 		// defer to it instead of opening devtools.
-		dir, err := os.MkdirTemp(wslTmp, "rod-e2e-")
+		dir, err := os.MkdirTemp(wslTmp, "e2e-")
 		require.NoError(t, err)
 		profile := windowsPath(t, dir)
 
 		port := 20000 + rand.Intn(30000)
 		cmd := exec.Command(bin,
-			"--headless",
+			"--headless=new",
 			"--disable-gpu",
 			"--no-first-run",
 			"--no-default-browser-check",
@@ -274,14 +326,17 @@ func newWindowsBrowser(t *testing.T, bin string) *rod.Browser {
 	}
 	require.NotEmpty(t, wsURL, "browser devtools endpoint never came up")
 
-	return rod.New().ControlURL(wsURL).MustConnect()
+	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(context.Background(), wsURL)
+	browserCtx, _ := chromedp.NewContext(allocCtx)
+	require.NoError(t, chromedp.Run(browserCtx))
+	return &browser{browserCtx: browserCtx, allocatorCancel: cancelAlloc}
 }
 
 // windowsPath converts dir to a Windows path the browser binary
 // understands: wslpath on Linux/WSL, identity on Windows.
 func windowsPath(t *testing.T, dir string) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		return dir
 	}
 	out, err := exec.Command("wslpath", "-w", dir).Output()
@@ -298,7 +353,7 @@ func killByProfile(profile string) {
 		` Where-Object { $_.CommandLine -like '*` + profile + `*' } |` +
 		` ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`
 	powershell := "powershell.exe"
-	if runtime.GOOS != "windows" {
+	if goruntime.GOOS != "windows" {
 		powershell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
 	}
 	_ = exec.Command(powershell, "-NoProfile", "-Command", ps).Run()
@@ -320,11 +375,15 @@ func (w *consoleWatcher) errors() []string {
 	return out
 }
 
-func watchConsole(page *rod.Page) *consoleWatcher {
+// watchConsole registers a chromedp target listener on ctx. It must be
+// called before the first chromedp.Run on ctx so no early console
+// events are missed.
+func watchConsole(ctx context.Context) *consoleWatcher {
 	w := &consoleWatcher{}
-	go page.EachEvent(
-		func(e *proto.RuntimeConsoleAPICalled) {
-			if e.Type != proto.RuntimeConsoleAPICalledTypeError {
+	chromedp.ListenTarget(ctx, func(ev any) {
+		switch e := ev.(type) {
+		case *runtime.EventConsoleAPICalled:
+			if e.Type != runtime.APITypeError {
 				return
 			}
 			w.mu.Lock()
@@ -332,8 +391,7 @@ func watchConsole(page *rod.Page) *consoleWatcher {
 			for _, a := range e.Args {
 				w.errs = append(w.errs, a.Description)
 			}
-		},
-		func(e *proto.RuntimeExceptionThrown) {
+		case *runtime.EventExceptionThrown:
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			txt := e.ExceptionDetails.Text
@@ -341,84 +399,142 @@ func watchConsole(page *rod.Page) *consoleWatcher {
 				txt += " " + e.ExceptionDetails.Exception.Description
 			}
 			w.errs = append(w.errs, "uncaught: "+txt)
-		},
-	)()
+		}
+	})
 	return w
 }
 
-// waitElement waits for sel with a DOM dump on timeout — headless CI
-// failures otherwise give no hint what the page looked like.
-func waitElement(t *testing.T, page *rod.Page, sel string) *rod.Element {
+// js quotes s for embedding in a JS single-line expression.
+func js(s string) string {
+	raw, _ := json.Marshal(s)
+	return string(raw)
+}
+
+// eval evaluates a JS expression in the page and returns its value.
+func eval(ctx context.Context, expr string, out any) error {
+	return chromedp.Run(ctx, chromedp.Evaluate(expr, out))
+}
+
+func evalBool(ctx context.Context, expr string) bool {
+	var v bool
+	if err := eval(ctx, expr, &v); err != nil {
+		return false
+	}
+	return v
+}
+
+// waitElement waits for sel to be visible with a DOM dump on timeout —
+// headless CI failures otherwise give no hint what the page looked
+// like.
+func waitElement(t *testing.T, ctx context.Context, sel string) {
 	t.Helper()
-	el, err := page.Timeout(45 * time.Second).Element(sel)
-	if err != nil {
-		html, _ := page.HTML()
+	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	if err := chromedp.Run(cctx, chromedp.WaitVisible(sel, chromedp.ByQuery)); err != nil {
+		var html string
+		_ = eval(ctx, `document.documentElement.outerHTML`, &html)
 		if len(html) > 4000 {
 			html = html[:4000]
 		}
 		t.Fatalf("element %q not found: %v\npage html:\n%s", sel, err, html)
 	}
-	return el
+}
+
+// waitElementText waits until some element matching sel contains text
+// (case-insensitive substring — innerText reflects text-transform).
+// Exact-match variants use clickText.
+func waitElementText(t *testing.T, ctx context.Context, sel, text string) {
+	t.Helper()
+	deadline := time.Now().Add(45 * time.Second)
+	expr := `[...document.querySelectorAll(` + js(sel) + `)]` +
+		`.some(e => (e.innerText||'').toLowerCase().includes(` + js(strings.ToLower(text)) + `))`
+	for time.Now().Before(deadline) {
+		if evalBool(ctx, expr) {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("no %q element containing text %q", sel, text)
 }
 
 // click waits for sel then clicks it via a fresh querySelector inside
 // the page — Vue re-renders elements when reactive props flip (e.g.
 // :disabled), so an element handle grabbed before the click can be
 // detached by the time JS runs on it.
-func click(t *testing.T, page *rod.Page, sel string) {
+func click(t *testing.T, ctx context.Context, sel string) {
 	t.Helper()
-	waitElement(t, page, sel)
-	page.MustEval(`s => { const el = document.querySelector(s); el && el.click(); }`, sel)
+	waitElement(t, ctx, sel)
+	require.NoError(t, eval(ctx,
+		`{ const el = document.querySelector(`+js(sel)+`); el && el.click(); }`, nil))
 }
 
 // clickText waits for an element matching sel whose trimmed text
 // equals text (case-insensitive — innerText reflects text-transform),
 // then clicks it via JS (exact match avoids the
 // "New workflow" / "New workflow group" prefix collision).
-func clickText(t *testing.T, page *rod.Page, sel, text string) {
+func clickText(t *testing.T, ctx context.Context, sel, text string) {
 	t.Helper()
+	expr := `[...document.querySelectorAll(` + js(sel) + `)]` +
+		`.find(e => (e.innerText||'').trim().toLowerCase() === ` + js(strings.ToLower(text)) + `)`
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		els, err := page.Elements(sel)
-		if err == nil {
-			for _, el := range els {
-				if s, err := el.Text(); err == nil &&
-					strings.EqualFold(strings.TrimSpace(s), text) {
-					page.MustEval(
-						`(s, t) => {
-							const el = [...document.querySelectorAll(s)]
-								.find(e => e.innerText.trim().toLowerCase() === t.toLowerCase());
-							el && el.click();
-						}`, sel, text)
-					return
-				}
-			}
+		if evalBool(ctx, `!!(`+expr+`)`) {
+			require.NoError(t, eval(ctx, `(`+expr+`)?.click()`, nil))
+			return
 		}
 		if time.Now().After(deadline) {
 			var seen []string
-			if els, err := page.Elements(sel); err == nil {
-				for _, el := range els {
-					if s, err := el.Text(); err == nil {
-						seen = append(seen, s)
-					}
-				}
-			}
+			_ = eval(ctx,
+				`[...document.querySelectorAll(`+js(sel)+`)].map(e => e.innerText)`,
+				&seen)
 			t.Fatalf("no %q element with text %q (saw %v)", sel, text, seen)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 }
 
-// mustPage opens a fresh page at url with Runtime events enabled and
-// a console watcher attached before navigation.
-func mustPage(t *testing.T, browser *rod.Browser, url string) (*rod.Page, *consoleWatcher) {
+// setInput sets an input's value and fires 'input'/'change' events so
+// Vue's v-model picks it up (a bare .value assignment doesn't).
+func setInput(t *testing.T, ctx context.Context, sel, value string) {
 	t.Helper()
-	page := browser.Timeout(60 * time.Second).MustPage()
-	t.Cleanup(func() { _ = page.Close() })
-	require.NoError(t, proto.RuntimeEnable{}.Call(page))
-	w := watchConsole(page)
-	page.MustNavigate(url)
-	return page, w
+	waitElement(t, ctx, sel)
+	require.NoError(t, eval(ctx, `{
+		const el = document.querySelector(`+js(sel)+`);
+		el.focus(); el.select(); el.value = `+js(value)+`;
+		el.dispatchEvent(new Event('input', {bubbles: true}));
+		el.dispatchEvent(new Event('change', {bubbles: true}));
+	}`, nil))
+}
+
+// inputValue returns the .value property of sel.
+func inputValue(t *testing.T, ctx context.Context, sel string) string {
+	t.Helper()
+	var v string
+	require.NoError(t, eval(ctx,
+		`document.querySelector(`+js(sel)+`).value`, &v))
+	return v
+}
+
+// elementsLen returns the number of elements matching sel.
+func elementsLen(t *testing.T, ctx context.Context, sel string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, eval(ctx,
+		`document.querySelectorAll(`+js(sel)+`).length`, &n))
+	return n
+}
+
+// mustPage opens a fresh tab at url with a console watcher attached
+// before navigation. ctx is the tab context for all further actions.
+func mustPage(t *testing.T, b *browser, url string) (context.Context, *consoleWatcher) {
+	t.Helper()
+	tabCtx, cancel := chromedp.NewContext(b.browserCtx)
+	t.Cleanup(cancel)
+	w := watchConsole(tabCtx)
+	runCtx, runCancel := context.WithTimeout(tabCtx, 60*time.Second)
+	defer runCancel()
+	require.NoError(t, chromedp.Run(runCtx, runtime.Enable(), chromedp.Navigate(url)))
+	return tabCtx, w
 }
 
 // waitVueApp waits until the CDN globals the Vue pages need are
@@ -426,17 +542,16 @@ func mustPage(t *testing.T, browser *rod.Browser, url string) (*rod.Page, *conso
 // Vue / drawflow) intermittently fail under headless — without this,
 // clicks land on the unmounted mustache template and time out far
 // downstream. Reloads up to 2 times on missing globals.
-func waitVueApp(t *testing.T, page *rod.Page) {
+func waitVueApp(t *testing.T, ctx context.Context) {
 	t.Helper()
+	expr := `typeof Vue !== 'undefined' &&` +
+		`typeof bootstrap !== 'undefined' &&` +
+		`!!document.querySelector('#app[data-v-app]')`
 	for attempt := 0; attempt < 3; attempt++ {
 		ready := false
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {
-			res, err := page.Eval(`() =>
-				typeof Vue !== 'undefined' &&
-				typeof bootstrap !== 'undefined' &&
-				!!document.querySelector('#app[data-v-app]')`)
-			if err == nil && res.Value.Bool() {
+			if evalBool(ctx, expr) {
 				ready = true
 				break
 			}
@@ -445,7 +560,7 @@ func waitVueApp(t *testing.T, page *rod.Page) {
 		if ready {
 			return
 		}
-		_ = page.Reload()
+		_ = chromedp.Run(ctx, chromedp.Reload())
 	}
 	t.Fatal("Vue app never mounted (CDN scripts unavailable after reloads)")
 }

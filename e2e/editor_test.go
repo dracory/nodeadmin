@@ -3,8 +3,11 @@
 package e2e
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/chromedp/chromedp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,33 +25,37 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	// Vue mounted: the explorer tree and toolbar rendered.
 	waitElement(t, page, ".editor-toolbar")
 
-	// New workflow via the explorer "+" dropdown (JS clicks — rod's
-	// pointer click waits for scroll-into-view stability the small
-	// icon buttons can flap on under headless, and the Bootstrap
-	// dropdown visibility is not needed for Vue's @click handler).
+	// New workflow via the explorer "+" dropdown (JS clicks —
+	// chromedp's pointer click waits for scroll-into-view stability
+	// the small icon buttons can flap on under headless, and the
+	// Bootstrap dropdown visibility is not needed for Vue's @click
+	// handler).
 	click(t, page, `button[title="New workflow or workflow group"]`)
 	clickText(t, page, ".dropdown-item", "New workflow")
-	page.MustElement("#newWorkflowModal input").MustWaitVisible().MustInput("E2E Flow")
+	setInput(t, page, "#newWorkflowModal input", "E2E Flow")
 	click(t, page, "#newWorkflowModal .btn-primary")
 
 	// The workflow is selected: the Add Node button becomes enabled.
 	click(t, page, `button[title="Add node"]:not(:disabled)`)
 
 	// Palette lists registered node types.
-	if el, err := page.Timeout(45e9).Element("#addNodeModal.show .node-type-item"); err != nil {
-		state, _ := page.Eval(`() => JSON.stringify({
+	cctx, cancel := context.WithTimeout(page, 45*time.Second)
+	if err := chromedp.Run(cctx,
+		chromedp.WaitVisible("#addNodeModal.show .node-type-item", chromedp.ByQuery)); err != nil {
+		cancel()
+		var state string
+		_ = eval(page, `JSON.stringify({
 			bootstrap: typeof bootstrap,
 			modalClass: document.querySelector('#addNodeModal')?.className,
 			items: document.querySelectorAll('#addNodeModal .node-type-item').length,
 			listText: document.querySelector('#addNodeModal .modal-body')?.innerText?.slice(0, 300),
-		})`)
+		})`, &state)
 		t.Logf("palette wait failed; page state: %v; console errors: %v", state, w.errors())
 		t.Fatalf("palette did not open: %v", err)
-	} else {
-		_ = el
 	}
-	types := page.MustElements("#addNodeModal .node-type-item")
-	require.NotEmpty(t, types, "palette should list node types")
+	cancel()
+	require.Positive(t, elementsLen(t, page, "#addNodeModal .node-type-item"),
+		"palette should list node types")
 
 	// Add the first node type to the canvas (fresh querySelector —
 	// Vue re-renders the list when the filter model updates).
@@ -57,7 +64,7 @@ func TestEditorCreateSavePersist(t *testing.T) {
 
 	// Save — the badge confirms the roundtrip completed.
 	click(t, page, `button[title="Save workflow"]:not(:disabled)`)
-	page.MustElementR(".editor-toolbar .badge.bg-success", "Saved")
+	waitElementText(t, page, ".editor-toolbar .badge.bg-success", "Saved")
 
 	// Persisted server-side: fetch the workflow list and require a
 	// stored node on the workflow the editor created.
@@ -69,9 +76,10 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	require.NotEmpty(t, nodes, "saved workflow should persist its node")
 
 	// And a fresh editor load still shows the workflow in the tree.
-	page.MustNavigate(srv.browserURL("/?controller=editor"))
+	require.NoError(t, chromedp.Run(page,
+		chromedp.Navigate(srv.browserURL("/?controller=editor"))))
 	waitVueApp(t, page)
-	page.MustElementR(".module-item", "E2E Flow")
+	waitElementText(t, page, ".module-item", "E2E Flow")
 
 	if errs := w.errors(); len(errs) > 0 {
 		t.Fatalf("console errors on editor: %v", errs)

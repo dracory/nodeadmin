@@ -72,5 +72,5 @@ func TestDeployRestartResume(t *testing.T) {
 	page, _ := mustPage(t, browser, srv.browserURL("/?controller=editor"))
 	waitVueApp(t, page)
 	waitElement(t, page, ".editor-toolbar")
-	page.MustElementR(".module-item", "E2E Deploy")
+	waitElementText(t, page, ".module-item", "E2E Deploy")
 }
