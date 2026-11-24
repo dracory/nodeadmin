@@ -1,0 +1,135 @@
+<!-- Content fragment rendered inside the admin chrome by
+     settings_page.go. AJAX URLs arrive via window.settingsManagerUrls
+     (injected by the page composer) — no hardcoded API paths in
+     settings.js. -->
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Settings</h1>
+    </div>
+
+    <!-- Errors/notices surface as Notiflix toasts (visible regardless
+         of scroll position) — no inline alert banners here. -->
+    <div v-if="loading" class="text-muted">
+        <i class="bi bi-arrow-repeat me-2"></i>Loading settings…
+    </div>
+
+    <div v-show="!loading">
+        <!-- Runtime engine overrides: persisted in the config store's
+             "global_config" blob ("engine" section) and applied to the
+             live engine. Empty = no override, the startup (env-var)
+             value applies. -->
+        <div class="card">
+            <div class="card-header">
+                <span><i class="bi bi-sliders me-2"></i>Engine Settings</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="maxSteps" class="form-label">Max steps per message</label>
+                    <input type="number" class="form-control" id="maxSteps"
+                           v-model="form.maxSteps"
+                           :placeholder="String(startup.maxSteps || engine.defaultMaxSteps)">
+                    <div class="form-text">
+                        Runaway-loop guard: maximum node executions one message may trigger.
+                        <code>-1</code> disables the quota. Empty inherits the startup value
+                        (<code>GOFLOW_MAX_STEPS</code>, currently {{ startup.maxSteps || 'default ' + engine.defaultMaxSteps }}).
+                        Per-workflow <code>view.maxSteps</code> still wins — set it in the
+                        editor's workflow properties.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="allowExec" class="form-label">Shell command execution (exec node)</label>
+                    <select class="form-select" id="allowExec" v-model="form.allowExec">
+                        <option value="">Startup default ({{ startup.allowExec ? 'enabled' : 'disabled' }})</option>
+                        <option value="enabled">Enabled</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                    <div class="form-text">
+                        Overrides <code>GOFLOW_ALLOW_EXEC</code>. Enabling lets exec nodes run
+                        arbitrary shell commands — only on trusted flows.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="fileRoot" class="form-label">File root (file/fileIn nodes)</label>
+                    <input type="text" class="form-control" id="fileRoot"
+                           v-model="form.fileRoot"
+                           :placeholder="startup.fileRoot || '(unrestricted)'">
+                    <div class="form-text">
+                        Sandboxes file/fileIn node paths to this directory. Overrides
+                        <code>GOFLOW_FILE_ROOT</code>. Empty inherits the startup value
+                        ({{ startup.fileRoot || 'unrestricted' }}).
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" :disabled="saving" @click="save">
+                    <i class="bi bi-save me-1"></i>{{ saving ? 'Saving…' : 'Save Changes' }}
+                </button>
+                <span class="ms-3 text-muted small" v-if="hasOverrides">
+                    Active overrides — these win over the env-var startup values and persist
+                    across restarts.
+                </span>
+            </div>
+        </div>
+
+        <!-- Global env: single editor lives in the Workflow Editor
+             (Env → Global env…); shown here read-only so the values
+             are visible where deployment settings live. -->
+        <div class="card mt-4">
+            <div class="card-header"><i class="bi bi-globe me-2"></i>Global Environment Variables</div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Deployment-wide env vars consulted by <code>env.get</code> after
+                    group/subflow/flow env and before the OS environment.
+                    {{ envRows.length ? envRows.length + ' defined.' : 'None defined.' }}
+                </p>
+                <table class="table table-sm table-striped" v-if="envRows.length">
+                    <thead>
+                        <tr><th>Name</th><th>Type</th><th>Value</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in envRows" :key="row.name">
+                            <td><code>{{ row.name }}</code></td>
+                            <td>{{ row.type }}</td>
+                            <td><code>{{ row.value }}</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Startup configuration: env-var/flag values resolved at
+             boot — read-only, not editable here. -->
+        <div class="card mt-4">
+            <div class="card-header"><i class="bi bi-server me-2"></i>Startup Configuration</div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Resolved at server start from environment variables and defaults —
+                    shown read-only. Restart the server to change them.
+                </p>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Admin authentication</dt>
+                    <dd class="col-sm-8">
+                        <span v-if="server.authEnabled" class="badge text-bg-success">enabled</span>
+                        <span v-else class="badge text-bg-warning">disabled — set GOFLOW_AUTH_FILE</span>
+                    </dd>
+
+                    <dt class="col-sm-4">Runner ID</dt>
+                    <dd class="col-sm-8"><code>{{ engine.runnerId || '—' }}</code></dd>
+
+                    <dt class="col-sm-4">Version</dt>
+                    <dd class="col-sm-8"><code>{{ engine.runnerVersion || '—' }}</code></dd>
+
+                    <dt class="col-sm-4">Startup max steps (GOFLOW_MAX_STEPS)</dt>
+                    <dd class="col-sm-8"><code>{{ startup.maxSteps || 'default (' + engine.defaultMaxSteps + ')' }}</code></dd>
+
+                    <dt class="col-sm-4">Startup exec allowed (GOFLOW_ALLOW_EXEC)</dt>
+                    <dd class="col-sm-8"><code>{{ startup.allowExec }}</code></dd>
+
+                    <dt class="col-sm-4">Startup file root (GOFLOW_FILE_ROOT)</dt>
+                    <dd class="col-sm-8"><code>{{ startup.fileRoot || '(unrestricted)' }}</code></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</main>

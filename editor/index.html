@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoFlow - Workflow Editor</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Bootlegance theme/mode switcher: themes + themes.json are fetched
+         from the same CDN base derived from this script URL. Default is
+         stock Bootstrap (opt-in switching only); selection persists via a
+         'theme' cookie, mode via localStorage key 'cf-theme'. -->
+    <script src="https://cdn.jsdelivr.net/gh/lesichkovm/bootlegance@v0.15.0/bootlegance.min.js"
+            data-bootlegance data-default-theme="bootstrap"></script>
+    <!-- Drawflow CSS -->
+    <link href="https://cdn.jsdelivr.net/gh/dracory/floweditor@v0.9.0/dist/drawflow.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    <style>
+        /* Bootlegance "Theme Settings" dropdown (canonical demo.html pattern) */
+        .theme-settings-menu { width: 300px; padding: 1rem; }
+        .theme-settings-menu .theme-section-label {
+            font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
+            text-transform: uppercase; opacity: 0.65; margin: 0.5rem 0 0.35rem;
+        }
+        .theme-settings-menu .font-size-badge { min-width: 3rem; text-align: center; }
+        .flow-editor-container {
+            height: calc(100vh - 56px);
+            overflow: hidden;
+        }
+        .sidebar {
+            border-right: 1px solid var(--bs-border-color);
+            height: 100%;
+            overflow-y: auto;
+        }
+        .editor-pane {
+            height: 100%;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        #drawflow {
+            width: 100%;
+            flex: 1;
+            text-align: initial;
+            /* floweditor theme tokens (drawflow.min.css reads these);
+               tuned to the app's palette instead of the library defaults */
+            --drawflow-node-background: #fff;
+            --drawflow-node-border-color: #999;
+            --drawflow-node-selected-background: #fff;
+            --drawflow-connection-color: #4a80b4;
+            --drawflow-connection-hover-color: #0d6efd;
+            --drawflow-connection-selected-color: #0d6efd;
+            --drawflow-point-stroke: #4a80b4;
+            --drawflow-point-selected-fill: #0d6efd;
+            --drawflow-input-background: #fff;
+            --drawflow-output-background: #fff;
+            --drawflow-port-border-color: #4a80b4;
+        }
+        /* Bootlegance dark mode (data-bs-theme="dark" on <html>): follow the
+           shell into dark canvas colors by overriding the same
+           --drawflow-* tokens; floweditor's drawflow.min.css reads them. */
+        [data-bs-theme="dark"] #drawflow {
+            background: #1b1f24;
+            --drawflow-node-background: #2b3035;
+            --drawflow-node-color: #dee2e6;
+            --drawflow-node-border-color: #555;
+            --drawflow-node-selected-background: #2b3035;
+            --drawflow-connection-color: #6ea8fe;
+            --drawflow-connection-hover-color: #9ec5fe;
+            --drawflow-connection-selected-color: #9ec5fe;
+            --drawflow-point-stroke: #6ea8fe;
+            --drawflow-point-selected-fill: #9ec5fe;
+            --drawflow-input-background: #2b3035;
+            --drawflow-output-background: #2b3035;
+            --drawflow-port-border-color: #6ea8fe;
+            --drawflow-minimap-background: rgba(30, 33, 36, .92);
+            --drawflow-minimap-border: #495057;
+            --drawflow-delete-background: #842029;
+            --drawflow-label-background: #2b3035;
+            --drawflow-label-color: #dee2e6;
+        }
+        /* Flow tab bar (task 11) */
+        .flow-tabs {
+            background: var(--bs-tertiary-bg);
+            border-bottom: 1px solid var(--bs-border-color);
+            padding: 0 8px;
+            min-height: 34px;
+            gap: 2px;
+            overflow-x: auto;
+        }
+        .flow-tab {
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: transparent;
+            padding: 4px 12px;
+            font-size: .85rem;
+            color: var(--bs-secondary-color);
+            border-radius: 4px 4px 0 0;
+            white-space: nowrap;
+        }
+        .flow-tab:hover { background: var(--bs-tertiary-bg); }
+        .flow-tab.active {
+            background: var(--bs-body-bg);
+            border-color: var(--bs-border-color);
+            color: #0d6efd;
+            font-weight: 600;
+            margin-bottom: -1px;
+        }
+        .flow-tab-close {
+            margin-left: 6px;
+            color: #999;
+            font-weight: 400;
+        }
+        .flow-tab-close:hover { color: #dc3545; }
+        .flow-tab-add { color: #0d6efd; }
+        .flow-tab.disabled { color: #adb5bd; font-style: italic; }
+        /* Module navigator tree (modules_as_first_class): the sidebar
+           lists every module; tabs are only the open ones */
+        .module-tree { font-size: .85rem; }
+        .module-tree-root {
+            font-weight: 600;
+            padding: 2px 4px;
+            color: var(--bs-secondary-color);
+        }
+        .module-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 4px 2px 12px;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #868e96;
+        }
+        .module-group-header .btn { line-height: 1; }
+        .module-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 4px 3px 22px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--bs-body-color);
+            user-select: none;
+        }
+        .module-item:hover { background: rgba(13, 110, 253, .12); }
+        .module-item.active { background: rgba(13, 110, 253, .18); color: #0d6efd; font-weight: 600; }
+        .module-item.disabled { color: #adb5bd; font-style: italic; }
+        .module-item .module-open-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #0d6efd;
+            margin-left: auto;
+            flex: none;
+        }
+        .module-empty {
+            padding: 2px 4px 2px 22px;
+            color: #adb5bd;
+            font-size: .78rem;
+        }
+        /* Unified file tree (sidebar_file_tree): one Explorer list —
+           workflow roots, user folders, module leaves */
+        .tree-chevron {
+            width: 12px;
+            flex: none;
+            font-size: .62rem;
+            color: #868e96;
+            transition: transform .12s;
+        }
+        .tree-chevron.open { transform: rotate(90deg); }
+        .tree-chevron-spacer { width: 12px; flex: none; }
+        .module-item.workflow-row { font-weight: 600; }
+        .module-item.workflow-row.selected { background: rgba(13, 110, 253, .18); }
+        .module-item.folder-row { color: var(--bs-secondary-color); }
+        .module-item.tree-drop-target {
+            outline: 1px dashed #0d6efd;
+            outline-offset: -1px;
+            background: rgba(13, 110, 253, .18);
+        }
+        /* Disabled nodes render dimmed (Node-RED parity cue) */
+        #drawflow .drawflow-node.goflow-node-disabled {
+            opacity: .45;
+        }
+        /* Floating canvas zoom controls (task 08) */
+        .canvas-controls {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            z-index: 11;
+        }
+        [data-bs-theme="dark"] .canvas-controls .btn-light {
+            --bs-btn-bg: #2b3035;
+            --bs-btn-border-color: #495057;
+            --bs-btn-color: #dee2e6;
+            --bs-btn-hover-bg: #343a40;
+            --bs-btn-hover-border-color: #6c757d;
+            --bs-btn-hover-color: #f8f9fa;
+            --bs-btn-active-bg: #343a40;
+            --bs-btn-active-border-color: #6c757d;
+            --bs-btn-active-color: #f8f9fa;
+        }
+        .canvas-controls .btn {
+            width: 34px;
+            height: 30px;
+            padding: 0;
+            line-height: 1;
+        }
+        /* Minimap overlay (task 08) */
+        .minimap {
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+            width: 160px;
+            height: 110px;
+            background: var(--drawflow-minimap-background, rgba(255, 255, 255, .92));
+            border: 1px solid var(--drawflow-minimap-border, #dee2e6);
+            border-radius: 4px;
+            z-index: 11;
+            overflow: hidden;
+        }
+        .minimap-node {
+            position: absolute;
+            border-radius: 2px;
+            opacity: .85;
+        }
+        .minimap-view {
+            position: absolute;
+            border: 1px solid #0d6efd;
+            background: rgba(13, 110, 253, .08);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        /* Node groups (task 36/39): layer/box styles live in
+           floweditor's drawflow.min.css since the model moved there */
+        .goflow-selected {
+            outline: 2px solid #0d6efd !important;
+            outline-offset: 1px;
+        }
+        /* Node context menu (task 09) */
+        .goflow-context-menu {
+            position: fixed;
+            z-index: 3000;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 6px;
+            min-width: 150px;
+            padding: 4px 0;
+        }
+        .node-type-item {
+            cursor: pointer;
+        }
+        .node-type-item:hover {
+            background: rgba(13, 110, 253, .12);
+        }
+        .palette-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .editor-header {
+            background: var(--bs-tertiary-bg);
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        .editor-header .flow-tabs {
+            border-bottom: none;
+            background: transparent;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .editor-toolbar {
+            flex: none;
+            padding: 0 8px;
+        }
+
+        /* Drawflow node styling (Node-RED style: colored header + body) */
+        #drawflow .drawflow-node {
+            min-width: 160px;
+            padding: 0;
+            border: 1px solid var(--drawflow-node-border-color, #999);
+            border-radius: 4px;
+            background: var(--drawflow-node-background, #fff);
+        }
+        #drawflow .drawflow-node.selected {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, .25);
+        }
+        .goflow-node .node-header {
+            padding: 6px 10px;
+            color: #fff;
+            font-weight: 600;
+            border-radius: 3px 3px 0 0;
+        }
+        .goflow-node .node-body {
+            padding: 8px 10px;
+            font-size: .85rem;
+            color: var(--drawflow-node-color, #555);
+        }
+        /* Fallback header colors for legacy types; dynamically typed nodes
+           set the header color inline in the node template */
+        .goflow-node.start .node-header { background: #4CAF50; }
+        .goflow-node.process .node-header { background: #2196F3; }
+        .goflow-node.decision .node-header { background: #FFC107; }
+        .goflow-node.end .node-header { background: #F44336; }
+        .goflow-node .node-summary {
+            color: #888;
+            font-size: .78rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+        }
+        /* Per-port output labels (injected next to each .output circle) */
+        #drawflow .drawflow-node .output .output-label {
+            position: absolute;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: .7rem;
+            color: var(--drawflow-node-color, #666);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        /* Transient toast feedback */
+        .goflow-toast {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 2000;
+            min-width: 240px;
+            max-width: 360px;
+        }
+        /* Per-node execution status dot (Node-RED style, under each node) */
+        .node-status-dot {
+            margin-top: 6px;
+            padding: 1px 8px 1px 16px;
+            font-size: .7rem;
+            border-radius: 8px;
+            position: relative;
+            display: inline-block;
+            background: var(--bs-tertiary-bg);
+            color: var(--bs-secondary-color);
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .node-status-dot::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #adb5bd;
+        }
+        .node-status-dot.st-running { background: #cfe2ff; color: #084298; }
+        .node-status-dot.st-running::before { background: #0d6efd; animation: statusPulse 1s infinite alternate; }
+        .node-status-dot.st-ok { background: #d1e7dd; color: #0f5132; }
+        .node-status-dot.st-ok::before { background: #198754; }
+        .node-status-dot.st-error { background: #f8d7da; color: #842029; }
+        .node-status-dot.st-error::before { background: #dc3545; }
+        @keyframes statusPulse {
+            from { opacity: .35; }
+            to { opacity: 1; }
+        }
+        /* Collapsible debug/log panel docked to the right of the canvas */
+        .debug-panel {
+            position: absolute;
+            top: 64px;
+            right: 0;
+            bottom: 0;
+            width: 320px;
+            background: var(--bs-body-bg);
+            border-left: 1px solid var(--bs-border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 9;
+            box-shadow: -2px 0 8px rgba(0, 0, 0, .06);
+        }
+        .debug-panel .debug-header {
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--bs-border-color);
+            font-weight: 600;
+            font-size: .85rem;
+        }
+        .debug-panel .debug-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 10px;
+            font-family: monospace;
+            font-size: .78rem;
+        }
+        .debug-panel .debug-event {
+            padding: 2px 0;
+            border-bottom: 1px solid var(--bs-border-color);
+            word-break: break-word;
+        }
+        .debug-panel .debug-time { color: var(--bs-secondary-color); margin-right: 6px; }
+        .debug-panel .debug-node { color: #0d6efd; margin-right: 6px; }
+        .debug-panel .lvl-error .debug-msg { color: #dc3545; }
+        .debug-panel .lvl-warn .debug-msg { color: #b02a37; }
+        .debug-panel .lvl-debug .debug-msg { color: #6c757d; }
+        .debug-panel .debug-json {
+            margin: 2px 0 2px 12px;
+            font-size: 0.8em;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- Shared app chrome (single parent layout, like cmsadmin's
+         server-side Layout): the navbar — incl. the Bootlegance Theme
+         Settings dropdown and user menu — comes from the AppNavigation
+         component; pages only render their content. -->
+    <app-navigation active="editor"></app-navigation>
+
+    <!-- Main content -->
+    <div class="container-fluid flow-editor-container">
+        <div class="row h-100">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-3">
+                <!-- Sidebar super-groups (sidebar_super_groups): the
+                     Explorer is split into two fixed sections —
+                     Workflows and Subflows — VSCode split-pane style.
+                     Each section header carries its own "+" create
+                     affordance (new workflow / workflow group; new
+                     subflow). Inside Workflows, workflow groups
+                     (server-persisted, organization only) contain
+                     workflow rows; the selected workflow expands into
+                     user folders (view.treeGroups, organization only)
+                     and flow-module leaves; a subflow module always
+                     renders under Subflows by kind even if a folder
+                     claims it. Click a leaf to open its tab;
+                     right-click a leaf for the module context menu;
+                     right-click a folder for folder actions, a
+                     workflow row for workflow/group actions. A blue
+                     dot marks open modules; a ban marks disabled
+                     ones. -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Explorer</h5>
+                </div>
+                <div class="module-tree mb-4">
+                    <!-- Super-group: Workflows -->
+                    <div class="module-group-header px-0">
+                        <span>
+                            <i class="fas fa-chevron-right tree-chevron me-1"
+                               :class="{ open: !collapsedTreeNodes['sg:workflows'] }"
+                               @click="toggleTreeNode('sg:workflows')"></i>Workflows
+                        </span>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                    data-bs-toggle="dropdown" aria-expanded="false"
+                                    title="New workflow or workflow group">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" @click.prevent="createWorkflow">
+                                    <i class="fas fa-diagram-project me-2"></i>New workflow
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" @click.prevent="createWorkflowGroup(null)">
+                                    <i class="fas fa-folder-plus me-2"></i>New workflow group
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <template v-if="!collapsedTreeNodes['sg:workflows']">
+                    <div v-for="row in workflowTreeRows" :key="row.key"
+                         class="module-item"
+                         :class="{
+                             'workflow-row': row.type === 'workflow',
+                             'selected': row.type === 'workflow' && row.selected,
+                             'folder-row': row.type === 'folder' || row.type === 'wgroup',
+                             'active': row.type === 'module' && activeTab === row.item.module,
+                             'disabled': row.type === 'module' && !row.item.enabled,
+                             'tree-drop-target': treeDropKey === row.key
+                         }"
+                         :style="{ paddingLeft: (4 + row.depth * 14) + 'px' }"
+                         :draggable="row.type === 'module' || row.type === 'workflow'"
+                         :title="row.type === 'workflow'
+                             ? 'Click to select, double-click for workflow properties, drag into a group'
+                             : (row.type === 'wgroup'
+                                 ? 'Workflow group — drag workflows in, right-click for actions'
+                                 : (row.type === 'folder'
+                                     ? 'Group folder — drag modules in, right-click for actions'
+                                     : 'Click to open, right-click for actions, drag into a folder'))"
+                         @click="onTreeRowClick(row)"
+                         @dblclick="onTreeRowDblClick(row)"
+                         @contextmenu="onTreeRowContextMenu($event, row)"
+                         @dragstart="onTreeDragStart($event, row)"
+                         @dragover="onTreeDragOver($event, row)"
+                         @dragleave="onTreeDragLeave(row)"
+                         @drop="onTreeDrop($event, row)">
+                        <i v-if="row.type === 'workflow' || row.type === 'folder' || row.type === 'wgroup'"
+                           class="fas fa-chevron-right tree-chevron" :class="{ open: row.expanded }"
+                           @click.stop="onTreeChevronClick(row)"></i>
+                        <span v-else class="tree-chevron-spacer"></span>
+                        <i class="fas text-secondary" :class="{
+                            'fa-diagram-project': row.type === 'workflow',
+                            'fa-folder-open': (row.type === 'folder' || row.type === 'wgroup') && row.expanded,
+                            'fa-folder': (row.type === 'folder' || row.type === 'wgroup') && !row.expanded,
+                            'fa-stream': row.type === 'module' && row.item.role !== 'subflow',
+                            'fa-object-group': row.type === 'module' && row.item.role === 'subflow'
+                        }"></i>
+                        <span class="text-truncate">{{ row.label }}</span>
+                        <template v-if="row.type === 'workflow'">
+                            <i v-if="row.selected" class="fas fa-cog ms-auto" role="button"
+                               title="Workflow properties" @click.stop="openWorkflowProps"></i>
+                            <i v-else class="fas fa-plus text-secondary ms-auto" role="button"
+                               title="Add a subflow to this workflow"
+                               @click.stop="addSubflowToWorkflow(row.workflow)"></i>
+                        </template>
+                        <template v-else-if="row.type === 'module'">
+                            <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Module disabled"></i>
+                            <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
+                        </template>
+                    </div>
+                    <div v-if="!workflows.length && !workflowGroups.length" class="module-empty">No workflows — + to create</div>
+                    </template>
+
+                    <!-- Super-group: Subflows — the selected workflow's
+                         role:"subflow" definition modules (they live
+                         inside the workflow document; there are no
+                         global subflows). Kind beats folder
+                         membership: a subflow in a folder still shows
+                         here. -->
+                    <div class="module-group-header px-0 mt-2">
+                        <span>
+                            <i class="fas fa-chevron-right tree-chevron me-1"
+                               :class="{ open: !collapsedTreeNodes['sg:subflows'] }"
+                               @click="toggleTreeNode('sg:subflows')"></i>Subflows
+                        </span>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1" :disabled="!selectedWorkflow"
+                                @click="createSubflow()" title="New subflow definition (canvas module with port markers)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <template v-if="!collapsedTreeNodes['sg:subflows']">
+                    <div v-for="row in subflowTreeRows" :key="row.key"
+                         class="module-item"
+                         :class="{
+                             'active': activeTab === row.item.module,
+                             'disabled': !row.item.enabled,
+                             'tree-drop-target': treeDropKey === row.key
+                         }"
+                         :style="{ paddingLeft: (4 + (row.depth + 1) * 14) + 'px' }"
+                         :draggable="true"
+                         title="Click to open, right-click for actions, drag into a folder"
+                         @click="onTreeRowClick(row)"
+                         @dblclick="onTreeRowDblClick(row)"
+                         @contextmenu="onTreeRowContextMenu($event, row)"
+                         @dragstart="onTreeDragStart($event, row)"
+                         @dragover="onTreeDragOver($event, row)"
+                         @dragleave="onTreeDragLeave(row)"
+                         @drop="onTreeDrop($event, row)">
+                        <span class="tree-chevron-spacer"></span>
+                        <i class="fas fa-object-group text-secondary"></i>
+                        <span class="text-truncate">{{ row.label }}</span>
+                        <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Module disabled"></i>
+                        <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
+                    </div>
+                    <div v-if="!subflowTreeRows.length" class="module-empty">
+                        {{ selectedWorkflow ? 'No subflows — + to create' : 'Select a workflow to see its subflows' }}
+                    </div>
+                    </template>
+                </div>
+
+            </div>
+
+            <!-- Editor pane -->
+            <div class="col-md-9 col-lg-10 editor-pane">
+                <!-- Flow tabs (task 11): each tab is a Drawflow module;
+                     toolbar shares the row so it never overlays tab labels -->
+                <div class="editor-header d-flex align-items-end">
+                <div class="flow-tabs d-flex align-items-end">
+                    <button v-for="tab in flowTabs" :key="tab.module"
+                            class="flow-tab" :class="{ active: activeTab === tab.module, disabled: tab.disabled }"
+                            title="Click to switch, double-click to rename, right-click to disable/enable. Closing a tab keeps the module in the tree."
+                            @click="switchTab(tab)" @dblclick="renameFlowTab(tab)"
+                            @contextmenu.prevent="toggleFlowTabDisabled(tab)">
+                        <i v-if="tab.role === 'subflow'" class="fas fa-object-group me-1" title="Subflow template module"></i>{{ tab.label }}
+                        <i v-if="tab.disabled" class="fas fa-ban ms-1" title="Flow disabled"></i>
+                        <span v-if="flowTabs.length > 1" class="flow-tab-close"
+                              title="Close flow" @click.stop="closeFlowTab(tab)">&times;</span>
+                    </button>
+                    <button class="flow-tab flow-tab-add" title="New flow" @click="addFlowTab">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div class="editor-toolbar d-flex align-items-center">
+                    <span v-if="dirty" class="badge bg-warning text-dark me-2 align-middle">Unsaved changes</span>
+                    <span v-if="saveStatus" class="badge me-2 align-middle"
+                          :class="{ 'bg-secondary': saveStatus === 'saving', 'bg-success': saveStatus === 'saved', 'bg-danger': saveStatus === 'error' }">
+                        {{ saveStatusMessage }}
+                    </span>
+                    <span v-if="runnerId" class="badge bg-info text-dark me-2 align-middle"
+                          title="Runner holding this workflow's lease">
+                        <i class="fas fa-server me-1"></i>{{ runnerId }}
+                    </span>
+                    <button class="btn btn-primary me-2" :disabled="!selectedWorkflow"
+                            @click="openAddNodeModal" title="Add node">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="btn btn-primary" :disabled="!selectedWorkflow || !dirty || saveStatus === 'saving'"
+                            @click="saveWorkflow" title="Save workflow">
+                        <i class="fas fa-save"></i>
+                    </button>
+                    <button v-if="!running" class="btn btn-success ms-2" :disabled="!selectedWorkflow"
+                            @click="runWorkflow" title="Deploy — activate the workflow, triggers start listening">
+                        <i class="fas fa-rocket"></i>
+                    </button>
+                    <div v-else class="btn-group ms-2">
+                        <button class="btn btn-danger" @click="stopWorkflow" title="Undeploy — deactivate the workflow, triggers stop listening">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                        <button class="btn btn-danger dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" @click.prevent="redeployWorkflow">
+                                <i class="fas fa-redo me-2"></i>Redeploy
+                            </a></li>
+                        </ul>
+                    </div>
+                    <div class="btn-group ms-2">
+                        <button class="btn btn-outline-secondary" data-bs-toggle="dropdown"
+                                aria-expanded="false" title="Environment variables (env.get chain: group > subflow > flow > global > OS)">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" @click.prevent="openFlowEnv">
+                                <i class="fas fa-stream me-2"></i>Flow env…
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" @click.prevent="openGlobalEnv">
+                                <i class="fas fa-globe me-2"></i>Global env…
+                            </a></li>
+                        </ul>
+                    </div>
+                    <div class="btn-group ms-2">
+                        <button class="btn btn-outline-secondary" data-bs-toggle="dropdown"
+                                aria-expanded="false" title="More actions">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" @click.prevent="exportFlowJson">
+                                <i class="fas fa-file-export me-2"></i>Export
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" @click.prevent="openImportModal">
+                                <i class="fas fa-file-import me-2"></i>Import
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" :class="{ disabled: !selectedWorkflow }"
+                                    :disabled="!selectedWorkflow"
+                                    @click.prevent="selectedWorkflow && openModuleImport()">
+                                <i class="fas fa-file-import me-2"></i>Import module…
+                            </a></li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-outline-secondary ms-2" :class="{ active: debugOpen }"
+                            @click="toggleDebug" title="Toggle debug panel">
+                        <i class="fas fa-terminal"></i>
+                    </button>
+                </div>
+                </div>
+                <div v-if="activeModuleRole === 'subflow'"
+                     class="alert alert-secondary py-1 px-2 mb-0 small text-muted">
+                    <i class="fas fa-object-group me-1"></i>
+                    Editing subflow definition — add <em>Subflow input</em>/<em>Subflow output</em>
+                    nodes from Add Node to define its ports. Place instances from the
+                    <em>Subflows</em> palette category in any flow.
+                </div>
+                <div id="drawflow"></div>
+
+                <!-- Floating zoom controls (task 08) -->
+                <div class="canvas-controls btn-group-vertical shadow-sm">
+                    <button class="btn btn-light btn-sm" @click="zoomIn" title="Zoom in">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="btn btn-light btn-sm" @click="zoomOut" title="Zoom out">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="btn btn-light btn-sm" @click="zoomReset" title="Reset zoom">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button class="btn btn-light btn-sm" @click="fitToContent" title="Fit to content">
+                        <i class="fas fa-expand-arrows-alt"></i>
+                    </button>
+                </div>
+
+                <!-- Minimap overlay (task 08) -->
+                <div class="minimap shadow-sm" v-show="minimapNodes.length">
+                    <div v-for="(r, i) in minimapNodes" :key="i" class="minimap-node"
+                         :style="{ left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px', background: r.color }"></div>
+                    <div v-if="minimapView" class="minimap-view"
+                         :style="{ left: minimapView.x + 'px', top: minimapView.y + 'px', width: minimapView.w + 'px', height: minimapView.h + 'px' }"></div>
+                </div>
+
+                <!-- Node context menu (task 09) -->
+                <div v-if="contextMenu.show" class="goflow-context-menu shadow"
+                     :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+                    <button class="dropdown-item" @click="duplicateNode(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-copy me-2"></i>Duplicate
+                    </button>
+                    <button class="dropdown-item" @click="centerOnNode(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-crosshairs me-2"></i>Center
+                    </button>
+                    <button class="dropdown-item" @click="groupSelectedNodes(); closeContextMenu()">
+                        <i class="fas fa-object-group me-2"></i>Group selected
+                    </button>
+                    <button v-if="nodeInAnyGroup(contextMenu.nodeId)" class="dropdown-item"
+                            @click="openGroupProps(nodeGroup(contextMenu.nodeId)); closeContextMenu()">
+                        <i class="fas fa-cog me-2"></i>Group properties…
+                    </button>
+                    <button v-if="nodeInAnyGroup(contextMenu.nodeId)" class="dropdown-item"
+                            @click="ungroupNode(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-object-ungroup me-2"></i>Ungroup
+                    </button>
+                    <button v-if="nodeInAnyGroup(contextMenu.nodeId)" class="dropdown-item"
+                            @click="openGroupEnv(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-list me-2"></i>Group env…
+                    </button>
+                    <button class="dropdown-item" @click="toggleNodeDisabled(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas me-2" :class="isNodeDisabled(contextMenu.nodeId) ? 'fa-toggle-on' : 'fa-toggle-off'"></i>
+                        {{ isNodeDisabled(contextMenu.nodeId) ? 'Enable' : 'Disable' }}
+                    </button>
+                    <button v-if="nodeInAnyGroup(contextMenu.nodeId)" class="dropdown-item"
+                            @click="toggleGroupDisabled(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas me-2" :class="nodeGroupDisabled(contextMenu.nodeId) ? 'fa-toggle-on' : 'fa-toggle-off'"></i>
+                        {{ nodeGroupDisabled(contextMenu.nodeId) ? 'Enable group' : 'Disable group' }}
+                    </button>
+                    <button class="dropdown-item" @click="openRunDetails(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-history me-2"></i>Run details
+                    </button>
+                    <button class="dropdown-item text-danger" @click="deleteNode(contextMenu.nodeId); closeContextMenu()">
+                        <i class="fas fa-trash me-2"></i>Delete
+                    </button>
+                </div>
+
+                <!-- Module tree context menu (module navigator) -->
+                <div v-if="moduleContextMenu.show" class="goflow-context-menu shadow"
+                     :style="{ left: moduleContextMenu.x + 'px', top: moduleContextMenu.y + 'px' }">
+                    <button class="dropdown-item"
+                            @click="openModuleItem({ module: moduleContextMenu.module, label: moduleLabelFor(moduleContextMenu.module), role: moduleRoleFor(moduleContextMenu.module) }); closeModuleContextMenu()">
+                        <i class="fas fa-folder-open me-2"></i>Open
+                    </button>
+                    <button class="dropdown-item"
+                            @click="renameModuleByName(moduleContextMenu.module); closeModuleContextMenu()">
+                        <i class="fas fa-pen me-2"></i>Rename
+                    </button>
+                    <button class="dropdown-item"
+                            @click="exportModule(moduleContextMenu.module); closeModuleContextMenu()">
+                        <i class="fas fa-file-export me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Export definition…' : 'Export module…' }}
+                    </button>
+                    <button v-if="moduleRoleFor(moduleContextMenu.module) === 'subflow'" class="dropdown-item"
+                            @click="openModuleEnv(moduleContextMenu.module); closeModuleContextMenu()">
+                        <i class="fas fa-list me-2"></i>Subflow env…
+                    </button>
+                    <button class="dropdown-item"
+                            @click="toggleModuleDisabled(moduleContextMenu.module); closeModuleContextMenu()">
+                        <i class="fas me-2" :class="moduleTree.flows.concat(moduleTree.subflows).some(m => m.module === moduleContextMenu.module && m.enabled) ? 'fa-toggle-off' : 'fa-toggle-on'"></i>
+                        {{ moduleTree.flows.concat(moduleTree.subflows).some(m => m.module === moduleContextMenu.module && m.enabled) ? 'Disable' : 'Enable' }}
+                    </button>
+                    <hr v-if="treeGroups.length" class="dropdown-divider my-1">
+                    <button v-if="treeGroups.length" class="dropdown-item"
+                            @click="moveModuleToFolder(moduleContextMenu.module, null); closeModuleContextMenu()">
+                        <i class="fas fa-level-up-alt me-2"></i>Move to root
+                    </button>
+                    <button v-for="g in treeGroups" :key="'move-' + g.id" class="dropdown-item"
+                            @click="moveModuleToFolder(moduleContextMenu.module, g.id); closeModuleContextMenu()">
+                        <i class="fas fa-folder me-2"></i>{{ folderPathFor(g) }}
+                    </button>
+                    <button class="dropdown-item text-danger"
+                            @click="deleteModuleByName(moduleContextMenu.module); closeModuleContextMenu()">
+                        <i class="fas fa-trash me-2"></i>Delete module
+                    </button>
+                </div>
+
+                <!-- Folder context menu (sidebar_file_tree): folders
+                     organize the tree only — no deploy/env/disabled
+                     semantics. -->
+                <div v-if="folderContextMenu.show" class="goflow-context-menu shadow"
+                     :style="{ left: folderContextMenu.x + 'px', top: folderContextMenu.y + 'px' }">
+                    <button class="dropdown-item"
+                            @click="createModuleInFolder('flow', folderContextMenu.folderId); closeFolderContextMenu()">
+                        <i class="fas fa-plus me-2"></i>New flow module here
+                    </button>
+                    <button class="dropdown-item"
+                            @click="createModuleInFolder('subflow', folderContextMenu.folderId); closeFolderContextMenu()">
+                        <i class="fas fa-object-group me-2"></i>New subflow here
+                    </button>
+                    <button class="dropdown-item"
+                            @click="createTreeFolder(folderContextMenu.folderId); closeFolderContextMenu()">
+                        <i class="fas fa-folder-plus me-2"></i>New subfolder
+                    </button>
+                    <button class="dropdown-item"
+                            @click="renameTreeFolder(folderById(folderContextMenu.folderId)); closeFolderContextMenu()">
+                        <i class="fas fa-pen me-2"></i>Rename folder
+                    </button>
+                    <button class="dropdown-item text-danger"
+                            @click="deleteTreeFolder(folderById(folderContextMenu.folderId)); closeFolderContextMenu()">
+                        <i class="fas fa-trash me-2"></i>Delete folder
+                    </button>
+                </div>
+
+                <!-- Workflow row context menu (workflow_groups):
+                     properties + module-folder creation (selects the
+                     workflow first) + group membership moves. -->
+                <div v-if="workflowContextMenu.show" class="goflow-context-menu shadow"
+                     :style="{ left: workflowContextMenu.x + 'px', top: workflowContextMenu.y + 'px' }">
+                    <button class="dropdown-item"
+                            @click="openWorkflowPropsFor(workflowById(workflowContextMenu.workflowId)); closeWorkflowContextMenu()">
+                        <i class="fas fa-cog me-2"></i>Properties…
+                    </button>
+                    <button class="dropdown-item"
+                            @click="createTreeFolderFor(workflowById(workflowContextMenu.workflowId)); closeWorkflowContextMenu()">
+                        <i class="fas fa-folder-plus me-2"></i>New module folder
+                    </button>
+                    <hr class="dropdown-divider my-1">
+                    <button v-if="workflowGroupFor(workflowContextMenu.workflowId)" class="dropdown-item"
+                            @click="moveWorkflowToGroup(workflowContextMenu.workflowId, null); closeWorkflowContextMenu()">
+                        <i class="fas fa-level-up-alt me-2"></i>Remove from group
+                    </button>
+                    <button v-for="g in workflowGroups" :key="'wmove-' + g.id" class="dropdown-item"
+                            :disabled="workflowGroupFor(workflowContextMenu.workflowId) && workflowGroupFor(workflowContextMenu.workflowId).id === g.id"
+                            @click="moveWorkflowToGroup(workflowContextMenu.workflowId, g.id); closeWorkflowContextMenu()">
+                        <i class="fas fa-folder me-2"></i>Move to: {{ workflowGroupPathFor(g) }}
+                    </button>
+                </div>
+
+                <!-- Workflow group context menu: organization only —
+                     delete never removes member workflows. -->
+                <div v-if="workflowGroupContextMenu.show" class="goflow-context-menu shadow"
+                     :style="{ left: workflowGroupContextMenu.x + 'px', top: workflowGroupContextMenu.y + 'px' }">
+                    <button class="dropdown-item"
+                            @click="createWorkflowGroup(workflowGroupContextMenu.groupId); closeWorkflowGroupContextMenu()">
+                        <i class="fas fa-folder-plus me-2"></i>New subgroup
+                    </button>
+                    <button class="dropdown-item"
+                            @click="renameWorkflowGroup(workflowGroupById(workflowGroupContextMenu.groupId)); closeWorkflowGroupContextMenu()">
+                        <i class="fas fa-pen me-2"></i>Rename group
+                    </button>
+                    <button class="dropdown-item text-danger"
+                            @click="deleteWorkflowGroup(workflowGroupById(workflowGroupContextMenu.groupId)); closeWorkflowGroupContextMenu()">
+                        <i class="fas fa-trash me-2"></i>Delete group
+                    </button>
+                </div>
+
+                <!-- Debug/log panel (collapsible, right-docked) -->
+                <div class="debug-panel" v-show="debugOpen">
+                    <div class="debug-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-terminal me-2"></i>Debug</span>
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1" @click="clearDebug">
+                            <i class="fas fa-trash-alt me-1"></i>Clear
+                        </button>
+                    </div>
+                    <div class="debug-body" ref="debugBody">
+                        <div v-for="ev in debugEvents" :key="ev.seq" class="debug-event" :class="'lvl-' + ev.level">
+                            <span class="debug-time">{{ formatEventTime(ev.time) }}</span>
+                            <span v-if="ev.node_name" class="debug-node">[{{ ev.node_name }}]</span>
+                            <pre v-if="isJSONMessage(ev.message)" class="debug-msg debug-json">{{ ev.message }}</pre>
+                            <span v-else class="debug-msg">{{ ev.message }}</span>
+                        </div>
+                        <div v-if="debugEvents.length === 0" class="text-muted">
+                            No messages yet. Run the workflow to see output.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Node modal -->
+    <div class="modal fade" id="addNodeModal" tabindex="-1" ref="addNodeModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Node</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="p-2 border-bottom">
+                        <input type="text" class="form-control form-control-sm"
+                               v-model="nodeTypeSearch"
+                               placeholder="Filter nodes...">
+                    </div>
+                    <div class="list-group list-group-flush">
+                        <button v-for="nodeType in filteredNodeTypes" :key="nodeType.id"
+                                class="list-group-item list-group-item-action node-type-item d-flex align-items-center"
+                                @click="addNodeFromModal(nodeType)">
+                            <span class="palette-dot" :style="{ background: nodeType.color }"></span>
+                            <i v-if="nodeType.icon" class="fas me-2 text-secondary" :class="'fa-' + nodeType.icon"></i>
+                            <span>
+                                <span class="d-block fw-semibold">{{ nodeType.name }}</span>
+                                <small v-if="nodeType.description" class="text-muted d-block">{{ nodeType.description }}</small>
+                                <small class="text-muted">{{ nodeType.inputs }} in / {{ nodeType.outputs }} out</small>
+                            </span>
+                        </button>
+                        <div v-if="filteredNodeTypes.length === 0" class="list-group-item text-muted">
+                            No node types match your search.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Workflow modal -->
+    <div class="modal fade" id="newWorkflowModal" tabindex="-1" ref="newWorkflowModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Workflow</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Name</label>
+                    <input type="text" class="form-control" v-model="newWorkflowName"
+                           :class="{ 'is-invalid': createError }"
+                           placeholder="e.g. Order Processing"
+                           @keyup.enter="confirmCreateWorkflow">
+                    <div class="invalid-feedback">{{ createError }}</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="confirmCreateWorkflow">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import flow JSON modal -->
+    <div class="modal fade" id="importModal" tabindex="-1" ref="importModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Import Flow</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Flow JSON</label>
+                    <textarea class="form-control font-monospace" rows="10"
+                              v-model="importJson"
+                              :class="{ 'is-invalid': importError }"
+                              placeholder='Paste the JSON produced by Export...'></textarea>
+                    <div class="invalid-feedback">{{ importError }}</div>
+                    <small class="form-text text-muted">Accepts a GoFlow canvas export or a Node-RED
+                        flow JSON array (imported as a new workflow, subflows included).</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="confirmImport">Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import module modal (module_export_import): merges a module
+         envelope into the CURRENT workflow as a new module — unlike
+         the toolbar Import, which replaces the canvas or creates a
+         new workflow. -->
+    <div class="modal fade" id="moduleImportModal" tabindex="-1" ref="moduleImportModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Import Module</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Module export JSON</label>
+                    <textarea class="form-control font-monospace" rows="10"
+                              v-model="moduleImportJson"
+                              :class="{ 'is-invalid': moduleImportError }"
+                              placeholder='Paste a GoFlow module export ({ "goflow": "module", ... })...'></textarea>
+                    <div class="invalid-feedback">{{ moduleImportError }}</div>
+                    <small class="form-text text-muted">Adds a new module to the selected workflow.
+                        Node and module ids are re-minted; references to nodes outside the
+                        exported module stay as-is and are reported if they cannot resolve.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="confirmModuleImport">Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node properties modal -->
+    <div class="modal fade" id="nodePropsModal" tabindex="-1" ref="nodePropsModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Node Properties</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" v-model="editingNodeName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <input type="text" class="form-control" :value="editingNodeType" disabled>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="nodeDisabledCheck"
+                               v-model="editingNodeDisabled">
+                        <label class="form-check-label" for="nodeDisabledCheck">
+                            Disabled
+                            <small class="text-muted">— node deploys inert; messages pass through unchanged</small>
+                        </label>
+                    </div>
+                    <!-- Schema-driven form -->
+                    <template v-if="editingNodeSchema">
+                        <div v-for="field in editingNodeSchemaFields" :key="field.key" class="mb-3"
+                             v-show="schemaFieldVisible(field)">
+                            <label class="form-label">
+                                {{ field.title }}
+                                <span v-if="field.required" class="text-danger">*</span>
+                            </label>
+                            <!-- Node-RED-style link pickers -->
+                            <div v-if="field.field === 'nodelist'" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                <div v-if="!field.options || !field.options.length" class="text-muted small">
+                                    No matching link nodes in this flow
+                                </div>
+                                <div v-for="opt in field.options" :key="opt.id" class="form-check">
+                                    <input type="checkbox" class="form-check-input" :id="'prop-' + field.key + '-' + opt.id"
+                                           :value="opt.id" v-model="editingNodeForm[field.key]">
+                                    <label class="form-check-label" :for="'prop-' + field.key + '-' + opt.id">
+                                        {{ opt.label }}
+                                    </label>
+                                </div>
+                            </div>
+                            <select v-else-if="field.field === 'nodeselect'" class="form-select"
+                                    v-model="editingNodeForm[field.key]"
+                                    :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                                <option value="">— select —</option>
+                                <option v-for="opt in field.options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
+                            </select>
+                            <select v-else-if="field.field === 'select'" class="form-select"
+                                    v-model="editingNodeForm[field.key]"
+                                    :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                                <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
+                            </select>
+                            <div v-else-if="field.field === 'checkbox'" class="form-check">
+                                <input type="checkbox" class="form-check-input" :id="'prop-' + field.key"
+                                       v-model="editingNodeForm[field.key]"
+                                       :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            </div>
+                            <input v-else-if="field.field === 'number'" type="number" class="form-control"
+                                   v-model="editingNodeForm[field.key]"
+                                   :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            <textarea v-else-if="field.field === 'textarea' || field.field === 'json'"
+                                      class="form-control" rows="3"
+                                      :class="{ 'font-monospace': field.field === 'json', 'is-invalid': editingNodeFormErrors[field.key] }"
+                                      v-model="editingNodeForm[field.key]"></textarea>
+                            <!-- Credential fields: masked input; the server
+                                 stores the value outside the flow document
+                                 and returns the "__PWRD__" sentinel when set -->
+                            <input v-else-if="field.field === 'credential'" type="password" class="form-control"
+                                   autocomplete="new-password"
+                                   placeholder="(stored as a credential — never exported)"
+                                   v-model="editingNodeForm[field.key]"
+                                   :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            <input v-else type="text" class="form-control"
+                                   v-model="editingNodeForm[field.key]"
+                                   :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            <small v-if="field.description" class="form-text text-muted">{{ field.description }}</small>
+                            <div class="invalid-feedback">{{ editingNodeFormErrors[field.key] }}</div>
+                        </div>
+                    </template>
+                    <!-- Fallback: raw JSON editing when no schema is available -->
+                    <div v-else class="mb-0">
+                        <label class="form-label">Data (JSON)</label>
+                        <textarea class="form-control font-monospace" rows="6" v-model="editingNodeData"
+                                  :class="{ 'is-invalid': editingNodeDataError }"></textarea>
+                        <div class="invalid-feedback">{{ editingNodeDataError }}</div>
+                    </div>
+                    <!-- Node-RED-style info: per-node markdown notes shown
+                         in the properties panel and stored in node.data -->
+                    <div class="mb-0">
+                        <label class="form-label">Info <small class="text-muted">(markdown)</small></label>
+                        <textarea class="form-control" rows="3" v-model="editingNodeInfo"
+                                  placeholder="Optional notes about this node (markdown supported)"></textarea>
+                        <div v-if="editingNodeInfo && editingNodeInfo.trim()"
+                             class="border rounded p-2 mt-2 small node-info-preview"
+                             v-html="renderMarkdown(editingNodeInfo)"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="saveNodeProperties">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group properties modal (group_properties) -->
+    <div class="modal fade" id="groupPropsModal" tabindex="-1" ref="groupPropsModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-object-group me-2"></i>Group Properties</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" v-model="groupEdit.name"
+                               @keyup.enter="saveGroupProps">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="groupDisabledCheck"
+                               v-model="groupEdit.disabled">
+                        <label class="form-check-label" for="groupDisabledCheck">
+                            Disabled
+                            <small class="text-muted">— every member node deploys inert</small>
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Members ({{ groupEdit.members.length }})</label>
+                        <ul class="list-group list-group-flush border rounded"
+                            style="max-height: 180px; overflow-y: auto;">
+                            <li v-for="m in groupEdit.members" :key="m.id"
+                                class="list-group-item py-1 px-2 small d-flex justify-content-between">
+                                <span>{{ m.label }}</span>
+                                <span class="text-muted font-monospace">{{ m.id }}</span>
+                            </li>
+                            <li v-if="!groupEdit.members.length" class="list-group-item py-1 px-2 small text-muted">
+                                No member nodes
+                            </li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            @click="openGroupEnvById(groupEdit.id)">
+                        <i class="fas fa-list me-1"></i>Environment…
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="saveGroupProps">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Queue inspection modal -->
+    <div class="modal fade" id="queueModal" tabindex="-1" ref="queueModal">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-inbox me-2"></i>{{ queueInspect.routes.length ? 'Checkpoint' : 'Queue' }}
+                        <span class="badge ms-2" :class="queueInspect.routes.length || queueInspect.hold ? 'text-bg-warning' : 'text-bg-secondary'">
+                            {{ queueInspect.routes.length ? 'awaiting approval' : (queueInspect.hold ? 'held' : 'draining') }}
+                        </span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="me-3">{{ queueInspect.count }} queued</span>
+                        <button v-if="!queueInspect.routes.length" type="button" class="btn btn-sm"
+                                :class="queueInspect.hold ? 'btn-success' : 'btn-warning'"
+                                @click="queueToggleHold">
+                            {{ queueInspect.hold ? 'Release' : 'Hold' }}
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                                @click="refreshQueueInspect" :disabled="queueInspect.loading">
+                            Refresh
+                        </button>
+                    </div>
+                    <div v-if="queueInspect.error" class="alert alert-danger py-2">{{ queueInspect.error }}</div>
+                    <div v-if="!queueInspect.items.length && !queueInspect.error" class="text-muted">
+                        {{ queueInspect.routes.length ? 'No items awaiting approval.' : 'Queue is empty.' }}
+                    </div>
+                    <table v-if="queueInspect.items.length" class="table table-sm align-middle">
+                        <thead>
+                            <tr><th>Seq</th><th>Age</th><th>Payload</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in queueInspect.items" :key="item.seq">
+                                <td class="text-muted">{{ item.seq }}</td>
+                                <td>{{ queueItemAge(item.age_seconds) }}</td>
+                                <td><code class="small">{{ item.preview }}</code></td>
+                                <td class="text-end text-nowrap">
+                                    <!-- Checkpoint: one release button per
+                                         named route; the item leaves only
+                                         on the chosen edge -->
+                                    <template v-if="queueInspect.routes.length">
+                                        <button v-for="route in queueInspect.routes" :key="route"
+                                                type="button" class="btn btn-sm btn-outline-primary me-1"
+                                                :title="'Release this item on route ' + route"
+                                                @click="queueRequeueItem(item.seq, route)">{{ route }}</button>
+                                    </template>
+                                    <button v-else type="button" class="btn btn-sm btn-outline-primary me-1"
+                                            title="Release this item downstream now"
+                                            @click="queueRequeueItem(item.seq)">Requeue</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                            title="Delete this item"
+                                            @click="queueDeleteItem(item.seq)">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run-details modal: per-node journal of recent executions -->
+    <div class="modal fade" id="runDetailsModal" tabindex="-1" ref="runDetailsModal">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-history me-2"></i>Run details
+                        <code class="ms-2 small">{{ runDetails.nodeId }}</code>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="me-3 text-muted small">last {{ runDetails.size }} executions</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                                @click="refreshRunDetails" :disabled="runDetails.loading">
+                            Refresh
+                        </button>
+                    </div>
+                    <div v-if="runDetails.error" class="alert alert-danger py-2">{{ runDetails.error }}</div>
+                    <div v-if="!runDetails.entries.length && !runDetails.error" class="text-muted">
+                        No executions recorded yet — deploy the flow and send a message through this node.
+                    </div>
+                    <div v-for="entry in runDetails.entries" :key="entry.seq"
+                         class="border rounded mb-2 p-2">
+                        <div class="d-flex align-items-center">
+                            <span class="badge" :class="entry.error ? 'text-bg-danger' : 'text-bg-success'">
+                                {{ entry.error ? 'error' : 'ok' }}
+                            </span>
+                            <span class="ms-2 small text-muted">#{{ entry.seq }}</span>
+                            <span class="ms-2 small">{{ runEntryTime(entry.time) }}</span>
+                            <span class="ms-2 small text-nowrap">{{ entry.duration_ms.toFixed(1) }} ms</span>
+                        </div>
+                        <div v-if="entry.error" class="text-danger small mt-1">{{ entry.error }}</div>
+                        <details class="mt-1">
+                            <summary class="small text-primary" style="cursor:pointer">input</summary>
+                            <pre class="small bg-light border rounded p-2 mt-1 mb-0"
+                                 style="max-height:240px;overflow:auto">{{ runEntryJSON(entry.input) }}</pre>
+                        </details>
+                        <details v-if="!entry.error" class="mt-1">
+                            <summary class="small text-primary" style="cursor:pointer">output</summary>
+                            <pre class="small bg-light border rounded p-2 mt-1 mb-0"
+                                 style="max-height:240px;overflow:auto">{{ runEntryJSON(entry.output) }}</pre>
+                        </details>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow properties modal (task 2026_11_23_workflow_properties):
+         rename + description + the flow-level view settings that had no
+         UI home (view.onError / maxSteps / inbox*). Saved through the
+         same update path as the canvas — the modal marks the workflow
+         dirty and the toolbar Save persists. -->
+    <div class="modal fade" id="workflowPropsModal" tabindex="-1" ref="workflowPropsModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Workflow Properties</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" v-model="wfProps.name"
+                               :class="{ 'is-invalid': wfPropsError === 'Workflow name is required' }"
+                               @keyup.enter="saveWorkflowProps">
+                        <div class="invalid-feedback">{{ wfPropsError }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="2" v-model="wfProps.description"
+                                  placeholder="What this workflow does"></textarea>
+                    </div>
+                    <h6 class="text-muted text-uppercase small">Flow settings</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Problem queue (onError)</label>
+                        <select class="form-select" v-model="wfProps.onError">
+                            <option value="">None — uncaught failures are logged and dropped</option>
+                            <option value="auto">Auto — built-in system queue (__problems__)</option>
+                            <option v-for="opt in wfQueueOptions" :key="opt.id" :value="opt.id">
+                                {{ opt.label }}
+                            </option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Where uncaught node failures land when no catch node claims them.
+                            Catch nodes in scope still win.
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Max steps (view.maxSteps)</label>
+                        <input type="number" class="form-control" v-model="wfProps.maxSteps"
+                               placeholder="engine default"
+                               :class="{ 'is-invalid': wfPropsError === 'Max steps must be a number' }">
+                        <small class="form-text text-muted">
+                            Per-injection step quota override. Empty = engine default; a negative
+                            value disables the quota.
+                        </small>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Inbox capacity</label>
+                            <input type="number" class="form-control" v-model="wfProps.inboxCapacity"
+                                   placeholder="engine default"
+                                   :class="{ 'is-invalid': wfPropsError === 'Inbox capacity must be a number' }">
+                            <small class="form-text text-muted">Flow-level bound on per-node queues (0/unset = unbounded).</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Inbox policy</label>
+                            <select class="form-select" v-model="wfProps.inboxPolicy">
+                                <option value="">Engine default</option>
+                                <option value="block">block</option>
+                                <option value="drop-newest">drop-newest</option>
+                                <option value="drop-oldest">drop-oldest</option>
+                                <option value="route-to-catch">route-to-catch</option>
+                            </select>
+                            <small class="form-text text-muted">What a full inbox does with a new message.</small>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Durable inboxes (inboxDurable)</label>
+                        <select class="form-select" v-model="wfProps.inboxDurable">
+                            <option value="">Engine default</option>
+                            <option value="true">Durable — persist node queues</option>
+                            <option value="false">Memory only</option>
+                        </select>
+                    </div>
+                    <div v-if="wfPropsError && wfPropsError !== 'Workflow name is required'
+                            && wfPropsError !== 'Max steps must be a number'
+                            && wfPropsError !== 'Inbox capacity must be a number'"
+                         class="alert alert-danger py-2 mt-3 mb-0">{{ wfPropsError }}</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="saveWorkflowProps">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Env table modal (flow / group / module / global env — Node-RED env.get chain) -->
+    <div class="modal fade" id="envModal" tabindex="-1" ref="envModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ envEdit.title || 'Environment Variables' }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-sm align-middle" v-if="envEdit.rows.length">
+                        <thead>
+                            <tr><th>Name</th><th style="width: 90px">Type</th><th>Value</th><th style="width: 40px"></th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(row, i) in envEdit.rows" :key="i">
+                                <td><input type="text" class="form-control form-control-sm" v-model="row.name" placeholder="NAME"></td>
+                                <td>
+                                    <select class="form-select form-select-sm" v-model="row.type">
+                                        <option value="str">str</option>
+                                        <option value="num">num</option>
+                                        <option value="bool">bool</option>
+                                        <option value="json">json</option>
+                                        <option value="env">env</option>
+                                    </select>
+                                </td>
+                                <td><input type="text" class="form-control form-control-sm" v-model="row.value"></td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1"
+                                            @click="removeEnvRow(i)" title="Remove">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-else class="text-muted small mb-2">No variables yet.</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" @click="addEnvRow">
+                        <i class="fas fa-plus me-1"></i>Add
+                    </button>
+                    <small class="form-text text-muted d-block mt-2">
+                        Rows are typed like Node-RED env vars (<code>str</code>/<code>num</code>/<code>bool</code>/<code>json</code>;
+                        <code>env</code> reads an OS environment variable). Flow and group env save with the workflow.
+                    </small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @click="saveEnvModal">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/dracory/floweditor@v0.9.0/dist/drawflow.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/components/navigation.js"></script>
+
+<!-- Main Application -->
+<script src="/editor/editor_app.js"></script>
+</body>
+</html>

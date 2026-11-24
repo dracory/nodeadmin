@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoFlow Dashboard</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f4f5; color: #18181b; }
+  @media (prefers-color-scheme: dark) { body { background: #18181b; color: #e4e4e7; } }
+  header { padding: .6rem 1rem; background: #52525b; color: #fff; display: flex; gap: 1rem; align-items: baseline; }
+  header h1 { font-size: 1.1rem; margin: 0; }
+  header .status { font-size: .8rem; opacity: .8; }
+  main { padding: 1rem; }
+  .page > h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #a1a1aa; }
+  .group { margin: .8rem 0; }
+  .group h3 { font-size: .85rem; color: #71717a; margin: .4rem 0; }
+  .widgets { display: flex; flex-wrap: wrap; gap: .8rem; }
+  .widget { background: #fff; border: 1px solid #d4d4d8; border-radius: .4rem; padding: .7rem .9rem; min-width: 12rem; }
+  @media (prefers-color-scheme: dark) { .widget { background: #27272a; border-color: #3f3f46; } }
+  .widget .label { font-size: .8rem; font-weight: 600; margin-bottom: .4rem; }
+  .widget .body pre { margin: 0; font-size: .8rem; white-space: pre-wrap; }
+  .widget .body .value { font-size: 1.3rem; word-break: break-word; }
+  .widget .body .hint { font-size: .75rem; color: #71717a; }
+  .widget .gauge { display: block; width: 100%; max-width: 12rem; }
+  .gauge-bg, .gauge-fill { fill: none; stroke-width: 8; stroke-linecap: round; }
+  .gauge-bg { stroke: #d4d4d8; }
+  .gauge-fill { stroke: #2563eb; }
+  .gauge-value { font-size: 1.2rem; font-weight: 600; text-anchor: middle; fill: currentColor; }
+  .gauge-units, .gauge-min, .gauge-max { font-size: .45rem; fill: #71717a; }
+  .gauge-units { text-anchor: middle; }
+  .widget-uiChart canvas { display: block; width: 100%; height: auto; }
+  #toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 10; }
+  .toast { background: #27272a; color: #fafafa; padding: .6rem .9rem; border-radius: .4rem;
+           font-size: .85rem; opacity: 0; transform: translateY(.5rem); transition: all .3s;
+           max-width: 20rem; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  .toast.show { opacity: 1; transform: none; }
+  .toast-success { border-left: 4px solid #16a34a; }
+  .toast-info { border-left: 4px solid #2563eb; }
+  .toast-warn { border-left: 4px solid #d97706; }
+  .toast-error { border-left: 4px solid #dc2626; }
+  #empty { color: #71717a; padding: 2rem; text-align: center; }
+  .dash-btn { font: inherit; padding: .35rem 1rem; border: 1px solid #2563eb; border-radius: .3rem;
+              background: #2563eb; color: #fff; cursor: pointer; }
+  .dash-btn:active { filter: brightness(.9); }
+  .dash-input { font: inherit; padding: .3rem .5rem; border: 1px solid #a1a1aa; border-radius: .3rem;
+                background: transparent; color: inherit; margin-right: .4rem; }
+  .dash-form .dash-field { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem;
+                           font-size: .85rem; }
+  .dash-form .dash-field .dash-input { flex: 1; margin-right: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GoFlow Dashboard</h1>
+  <span class="status" id="status">connecting…</span>
+</header>
+<main id="root"><div id="empty">Waiting for manifest…</div></main>
+<div id="toasts"></div>
+<script>
+(function () {
+  "use strict";
+
+  var params = new URLSearchParams(location.search);
+  var flow = params.get("flow");
+  var root = document.getElementById("root");
+  var statusEl = document.getElementById("status");
+
+  // Widget renderers keyed by widget type. Widget node tasks register
+  // a renderer here: fn(el, widget, state, fresh) updates el's body —
+  // `fresh` is false while replaying manifest state (late-join), so
+  // live-only widgets (uiNotification) can skip stale updates. The
+  // fallback dumps state JSON so unknown widgets still show something.
+  var renderers = window.goflowDashboardRenderers = window.goflowDashboardRenderers || {};
+  renderers["*"] = function (el, widget, state) {
+    el.querySelector(".body").innerHTML = "<pre>" + esc(JSON.stringify(state || {}, null, 2)) + "</pre>";
+  };
+
+  function body(el) { return el.querySelector(".body"); }
+
+  function fmtNum(v) { return Math.round(v * 100) / 100; }
+
+  // --- Output widget renderers (dashboard_widgets_out) -------------
+  // One function per widget type; the input-widget task adds its own
+  // family below without touching this section.
+
+  renderers["uiText"] = function (el, widget, state) {
+    // Per-message ui.label override wins over the manifest label.
+    if (state && state.label) { el.querySelector(".label").textContent = state.label; }
+    var v = state && state.value !== undefined ? String(state.value) : "";
+    body(el).innerHTML = '<div class="value">' + esc(v) + '</div>';
+  };
+
+  renderers["uiGauge"] = function (el, widget, state) {
+    var cfg = widget.config || {};
+    var min = typeof cfg.min === "number" ? cfg.min : 0;
+    var max = typeof cfg.max === "number" ? cfg.max : 100;
+    var units = cfg.units || "";
+    var v = state && typeof state.value === "number" ? state.value : null;
+    var frac = v === null ? 0 : Math.min(1, Math.max(0, (v - min) / (max - min || 1)));
+    var LEN = 125.66; // semicircle arc length, r=40
+    body(el).innerHTML =
+      '<svg viewBox="0 0 100 66" class="gauge">' +
+      '<path d="M 10 55 A 40 40 0 0 1 90 55" class="gauge-bg" />' +
+      '<path d="M 10 55 A 40 40 0 0 1 90 55" class="gauge-fill" ' +
+      'stroke-dasharray="' + (frac * LEN).toFixed(1) + " " + LEN + '" />' +
+      '<text x="50" y="50" class="gauge-value">' + (v === null ? "—" : esc(String(fmtNum(v)))) + "</text>" +
+      '<text x="50" y="64" class="gauge-units">' + esc(units) + "</text>" +
+      '<text x="10" y="64" class="gauge-min">' + esc(String(fmtNum(min))) + "</text>" +
+      '<text x="90" y="64" class="gauge-max" text-anchor="end">' + esc(String(fmtNum(max))) + "</text>" +
+      "</svg>";
+  };
+
+  function drawChart(el, series, bars) {
+    var cv = body(el).querySelector("canvas");
+    if (!cv) {
+      cv = document.createElement("canvas");
+      cv.width = 240; cv.height = 90;
+      body(el).innerHTML = "";
+      body(el).appendChild(cv);
+    }
+    var ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!series.length) {
+      ctx.fillStyle = "#71717a";
+      ctx.font = "10px system-ui";
+      ctx.fillText("no data", 6, 14);
+      return;
+    }
+    var min = Math.min.apply(null, series), max = Math.max.apply(null, series);
+    if (min > 0) { min = 0; }
+    if (max < 0) { max = 0; }
+    if (min === max) { min -= 1; max += 1; }
+    var span = max - min;
+    var style = getComputedStyle(el);
+    var ink = style.getPropertyValue("color") || "#888";
+    function pt(i, v) {
+      return [series.length > 1 ? (i / (series.length - 1)) * (W - 8) + 4 : W / 2,
+              H - 6 - ((v - min) / span) * (H - 14)];
+    }
+    if (bars) {
+      var bw = Math.max(1, (W - 8) / series.length - 1);
+      ctx.fillStyle = "#2563eb";
+      series.forEach(function (v, i) {
+        var x = 4 + i * ((W - 8) / series.length);
+        var y = pt(0, Math.max(0, v))[1], y0 = pt(0, Math.min(0, v))[1];
+        ctx.fillRect(x, y, bw, Math.max(1, y0 - y));
+      });
+    } else {
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      series.forEach(function (v, i) {
+        var p = pt(i, v);
+        if (i === 0) { ctx.moveTo(p[0], p[1]); } else { ctx.lineTo(p[0], p[1]); }
+      });
+      ctx.stroke();
+      ctx.strokeStyle = ink;
+      ctx.globalAlpha = 0.2;
+      ctx.beginPath();
+      var z = pt(0, 0)[1];
+      ctx.moveTo(0, z); ctx.lineTo(W, z);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  renderers["uiChart"] = function (el, widget, state) {
+    var cfg = widget.config || {};
+    var cap = typeof cfg.points === "number" && cfg.points > 0 ? cfg.points : 50;
+    if (!el._series || (state && Array.isArray(state.values))) {
+      el._series = state && Array.isArray(state.values)
+        ? state.values.filter(function (v) { return typeof v === "number"; })
+        : [];
+    }
+    if (state && typeof state.value === "number") { el._series.push(state.value); }
+    if (el._series.length > cap) { el._series.splice(0, el._series.length - cap); }
+    drawChart(el, el._series, cfg.kind === "bar");
+  };
+
+  function toast(text, level) {
+    var levels = ["info", "success", "warn", "error"];
+    var t = document.createElement("div");
+    t.className = "toast toast-" + (levels.indexOf(level) >= 0 ? level : "info");
+    t.textContent = text;
+    document.getElementById("toasts").appendChild(t);
+    setTimeout(function () { t.classList.add("show"); }, 10);
+    setTimeout(function () {
+      t.classList.remove("show");
+      setTimeout(function () { t.remove(); }, 300);
+    }, 5000);
+  }
+
+  renderers["uiNotification"] = function (el, widget, state, fresh) {
+    if (!el._hinted) {
+      el._hinted = true;
+      body(el).innerHTML = '<div class="hint">Pops a toast on each incoming message.</div>';
+    }
+    // Toasts are live-only: manifest replay must not re-fire them.
+    if (!fresh || !state || state.text === undefined) { return; }
+    toast(String(state.text), typeof state.level === "string" ? state.level : "info");
+  };
+
+  // --- Input widget renderers (dashboard_widgets_in) -------------
+  // Interaction → {"type":"input","node":id,"msg":{payload, ui}} ws
+  // frame → hub → InjectMessage downstream of the widget node.
+  // sendWidget wraps goflowDashboardSend: the msg.ui convention is
+  // {widget: node id, event: "click"|"submit"}; a dropped send (socket
+  // not open — nothing is queued) fails visibly with a toast.
+
+  function sendWidget(widget, event, payload) {
+    var ok = window.goflowDashboardSend(widget.id, {
+      payload: payload,
+      ui: { widget: widget.id, event: event }
+    });
+    if (!ok) { toast("Not connected — input dropped", "warn"); }
+  }
+
+  renderers["uiButton"] = function (el, widget) {
+    if (el._built) { return; } // stateless control — render once
+    el._built = true;
+    var cfg = widget.config || {};
+    var payload = cfg.payload !== undefined ? cfg.payload : "clicked";
+    var b = body(el);
+    b.innerHTML = "";
+    var btn = document.createElement("button");
+    btn.className = "dash-btn";
+    btn.type = "button";
+    btn.textContent = widget.label || widget.id;
+    btn.addEventListener("click", function () { sendWidget(widget, "click", payload); });
+    b.appendChild(btn);
+  };
+
+  renderers["uiTextInput"] = function (el, widget) {
+    if (el._built) { return; }
+    el._built = true;
+    var cfg = widget.config || {};
+    var b = body(el);
+    b.innerHTML = "";
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "dash-input";
+    input.placeholder = cfg.placeholder || "";
+    var btn = document.createElement("button");
+    btn.className = "dash-btn";
+    btn.type = "button";
+    btn.textContent = "Send";
+    function send() {
+      sendWidget(widget, "submit", input.value);
+      input.value = "";
+      input.focus();
+    }
+    btn.addEventListener("click", send);
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); send(); }
+    });
+    b.appendChild(input);
+    b.appendChild(btn);
+  };
+
+  renderers["uiForm"] = function (el, widget) {
+    if (el._built) { return; }
+    el._built = true;
+    var cfg = widget.config || {};
+    var fields = Array.isArray(cfg.fields) ? cfg.fields : [];
+    var b = body(el);
+    b.innerHTML = "";
+    if (!fields.length) {
+      b.innerHTML = '<div class="hint">No fields configured.</div>';
+      return;
+    }
+    var form = document.createElement("form");
+    form.className = "dash-form";
+    fields.forEach(function (f) {
+      var row = document.createElement("label");
+      row.className = "dash-field";
+      var caption = f.label || f.name;
+      var ctl;
+      if (f.type === "select") {
+        ctl = document.createElement("select");
+        (f.options || []).forEach(function (o) {
+          var opt = document.createElement("option");
+          opt.value = o; opt.textContent = o;
+          ctl.appendChild(opt);
+        });
+        if (f.value !== undefined) { ctl.value = f.value; }
+      } else if (f.type === "checkbox") {
+        ctl = document.createElement("input");
+        ctl.type = "checkbox";
+        ctl.checked = !!f.value;
+      } else {
+        ctl = document.createElement("input");
+        ctl.type = f.type === "number" ? "number" : "text";
+        if (f.value !== undefined && f.value !== null) { ctl.value = f.value; }
+      }
+      ctl.name = f.name;
+      ctl.className = "dash-input";
+      row.appendChild(document.createTextNode(caption + " "));
+      row.appendChild(ctl);
+      form.appendChild(row);
+    });
+    var btn = document.createElement("button");
+    btn.className = "dash-btn";
+    btn.type = "submit";
+    btn.textContent = "Submit";
+    form.appendChild(btn);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var out = {};
+      fields.forEach(function (f) {
+        var ctl = form.elements[f.name];
+        if (!ctl) { return; }
+        if (f.type === "checkbox") { out[f.name] = ctl.checked; }
+        else if (f.type === "number") { out[f.name] = ctl.value === "" ? null : Number(ctl.value); }
+        else { out[f.name] = ctl.value; }
+      });
+      sendWidget(widget, "submit", out);
+    });
+    b.appendChild(form);
+  };
+
+  var widgets = {};   // node id -> {el, def, state}
+  var manifest = null;
+  var ws = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function render(widget, state, fresh) {
+    var entry = widgets[widget.id];
+    if (!entry) { return; }
+    entry.state = state;
+    (renderers[widget.type] || renderers["*"])(entry.el, widget, state, fresh);
+  }
+
+  function build(m) {
+    manifest = m;
+    widgets = {};
+    root.innerHTML = "";
+    var list = (m.widgets || []);
+    if (!list.length) {
+      root.innerHTML = '<div id="empty">This workflow has no dashboard widgets.</div>';
+      return;
+    }
+    // Group: page -> group -> widgets (manifest arrives sorted).
+    var pages = {}, order = [];
+    list.forEach(function (w) {
+      var p = w.page || "default";
+      var g = w.group || "";
+      if (!pages[p]) { pages[p] = { groups: {}, gorder: [] }; order.push(p); }
+      if (!pages[p].groups[g]) { pages[p].groups[g] = []; pages[p].gorder.push(g); }
+      pages[p].groups[g].push(w);
+    });
+    order.forEach(function (p) {
+      var sec = document.createElement("section");
+      sec.className = "page";
+      sec.innerHTML = "<h2>" + esc(p) + "</h2>";
+      root.appendChild(sec);
+      pages[p].gorder.forEach(function (g) {
+        var gsec = document.createElement("div");
+        gsec.className = "group";
+        if (g) { gsec.innerHTML = "<h3>" + esc(g) + "</h3>"; }
+        var row = document.createElement("div");
+        row.className = "widgets";
+        gsec.appendChild(row);
+        sec.appendChild(gsec);
+        pages[p].groups[g].forEach(function (w) {
+          var el = document.createElement("div");
+          el.className = "widget widget-" + esc(w.type);
+          el.innerHTML = '<div class="label">' + esc(w.label || w.id) + '</div><div class="body"></div>';
+          row.appendChild(el);
+          widgets[w.id] = { el: el, def: w };
+          render(w, (m.state || {})[w.id], false);
+        });
+      });
+    });
+  }
+
+  // Public send helper for widget renderers (e.g. a button calls
+  // goflowDashboardSend("n1", {payload: "clicked"})). Returns false
+  // when the socket is not open — nothing is queued, so callers must
+  // surface the failure (sendWidget toasts).
+  window.goflowDashboardSend = function (node, msg) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      var frame = { type: "input", node: node };
+      if (msg !== undefined) { frame.msg = msg; }
+      ws.send(JSON.stringify(frame));
+      return true;
+    }
+    return false;
+  };
+
+  function connect() {
+    // The hub may be mounted at any prefix; derive the ws endpoint
+    // from the page URL (the page is served for any path under the mount).
+    var base = location.pathname.replace(/[^/]*$/, "");
+    var url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + base + "ws";
+    if (flow) { url += "?flow=" + encodeURIComponent(flow); }
+    statusEl.textContent = "connecting…";
+    ws = new WebSocket(url);
+    ws.onopen = function () { statusEl.textContent = "connected" + (flow ? " · " + flow : ""); };
+    ws.onclose = function () {
+      statusEl.textContent = "disconnected — retrying";
+      setTimeout(connect, 2000);
+    };
+    ws.onerror = function () { ws.close(); };
+    ws.onmessage = function (ev) {
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === "manifest") {
+        build(m);
+      } else if (m.type === "update") {
+        var w = widgets[m.node];
+        if (w) { render(w.def, m.state, true); }
+      } else if (m.type === "close") {
+        statusEl.textContent = "workflow undeployed";
+      } else if (m.type === "error") {
+        console.warn("dashboard:", m.message);
+      }
+    };
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>
