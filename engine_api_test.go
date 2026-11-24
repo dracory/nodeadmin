@@ -354,6 +354,23 @@ func TestQueueHoldDeleteRequeue(t *testing.T) {
 		apiData(t, env, "/api/node-inject")
 	}
 
+	// Hold is already set from node data; toggling it through the API
+	// flips the live gate. Do this while the queue is still empty —
+	// releasing the gate with items staged would drain them before
+	// the hold is re-applied.
+	env = postAPI(t, admin, "/api/queue-hold", map[string]interface{}{
+		"workflow_id": "wf-q", "node_id": "f", "hold": false,
+	})
+	if apiData(t, env, "/api/queue-hold")["hold"] != false {
+		t.Fatal("queue-hold did not release the gate")
+	}
+	env = postAPI(t, admin, "/api/queue-hold", map[string]interface{}{
+		"workflow_id": "wf-q", "node_id": "f", "hold": true,
+	})
+	if apiData(t, env, "/api/queue-hold")["hold"] != true {
+		t.Fatal("queue-hold did not set the gate")
+	}
+
 	// Inject sequentially: each traversal runs on its own goroutine,
 	// so wait for each payload to stage before sending the next —
 	// deterministic arrival order, same discipline as the engine's
@@ -372,21 +389,6 @@ func TestQueueHoldDeleteRequeue(t *testing.T) {
 	items, _ := data["items"].([]interface{})
 	seq0 := int64(items[0].(map[string]interface{})["seq"].(float64))
 	seq1 := int64(items[1].(map[string]interface{})["seq"].(float64))
-
-	// Hold is already set from node data; toggling it through the API
-	// flips the live gate (items keep arriving but do not drain).
-	env = postAPI(t, admin, "/api/queue-hold", map[string]interface{}{
-		"workflow_id": "wf-q", "node_id": "f", "hold": false,
-	})
-	if apiData(t, env, "/api/queue-hold")["hold"] != false {
-		t.Fatal("queue-hold did not release the gate")
-	}
-	env = postAPI(t, admin, "/api/queue-hold", map[string]interface{}{
-		"workflow_id": "wf-q", "node_id": "f", "hold": true,
-	})
-	if apiData(t, env, "/api/queue-hold")["hold"] != true {
-		t.Fatal("queue-hold did not set the gate")
-	}
 
 	// Delete drops one item for real.
 	env = postAPI(t, admin, "/api/queue-item-delete", map[string]interface{}{
