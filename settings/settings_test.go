@@ -13,8 +13,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/dracory/nodeadmin/shared"
-	"github.com/dracory/nodestore"
 	"github.com/dracory/noderun"
+	"github.com/dracory/nodestore"
 )
 
 // testSection builds a settings section on an in-memory nodestore and
@@ -154,6 +154,56 @@ func TestSettingsPageScriptsAfterVue(t *testing.T) {
 	}
 	if !(vueIdx < urlsIdx && urlsIdx < appIdx) {
 		t.Fatalf("script order wrong: vue=%d urls=%d app=%d", vueIdx, urlsIdx, appIdx)
+	}
+}
+
+// TestSettingsPageHasAppMount is a regression guard for the
+// missing-mount bug: the settings fragment carries no #app element,
+// so the page composer must wrap it — without the wrapper
+// app.mount('#app') throws and the page renders raw mustaches.
+func TestSettingsPageHasAppMount(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	entityStore, err := entitystore.NewStore(entitystore.NewStoreOptions{
+		DB:                 db,
+		EntityTableName:    "entity",
+		AttributeTableName: "attribute",
+		AutomigrateEnabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := nodestore.NewStore(nodestore.NewStoreOptions{EntityStore: entityStore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	section := New(noderunner.NewWorkflowEngine(), store)
+	cfg := shared.UiConfig{
+		Store: store,
+		Layout: func(w http.ResponseWriter, r *http.Request, title, html string, options shared.LayoutOptions) string {
+			_, _ = w.Write([]byte(shared.Layout(w, r, title, html, options)))
+			return ""
+		},
+	}
+	handler := section.UI(cfg).SettingsManager
+
+	req := httptest.NewRequest(http.MethodGet, "/?controller=settings", nil)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	page := rec.Body.String()
+	if !strings.Contains(page, `id="app"`) {
+		t.Fatal("settings page has no #app mount point — Vue cannot mount")
+	}
+	// The mount wrapper must enclose the fragment, not sit inside the
+	// section nav it injects.
+	if !strings.Contains(page, `<div id="app">`) {
+		t.Fatal(`expected a <div id="app"> wrapper around the fragment`)
 	}
 }
 
