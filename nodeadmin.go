@@ -77,6 +77,13 @@ type Options struct {
 	// inside your own layout (branding, menus, etc.). If nil, the
 	// default shared.Layout is used.
 	FuncLayout shared.FuncLayout
+
+	// DisableChrome hands chrome ownership to the host: the editor —
+	// a standalone page that bypasses FuncLayout — emits no nodeadmin
+	// navbar or section pills so an embedding host can wrap it in its
+	// own chrome. Sections are unaffected (they already render through
+	// FuncLayout when set). The zero value keeps the default chrome.
+	DisableChrome bool
 }
 
 // Interface defines the node admin. It is a standard http.Handler and
@@ -342,7 +349,7 @@ func (a *admin) buildRoutes() map[string]func(w http.ResponseWriter, r *http.Req
 		shared.CONTROLLER_HOME:      func(w http.ResponseWriter, r *http.Request) { home.UI(uiConfig).Home(w, r) },
 		shared.CONTROLLER_WORKFLOWS: func(w http.ResponseWriter, r *http.Request) { workflows.UI(uiConfig).Workflows(w, r) },
 		shared.CONTROLLER_MESSAGES:  func(w http.ResponseWriter, r *http.Request) { messages.UI(uiConfig).Messages(w, r) },
-		shared.CONTROLLER_EDITOR:    editor.Editor,
+		shared.CONTROLLER_EDITOR:    editor.New(a.opts.Store, !a.opts.DisableChrome).Editor,
 		shared.CONTROLLER_SETTINGS:  func(w http.ResponseWriter, r *http.Request) { a.settings.UI(uiConfig).SettingsManager(w, r) },
 	}
 }

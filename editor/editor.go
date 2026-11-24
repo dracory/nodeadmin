@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/dracory/nodeadmin/shared"
+	"github.com/dracory/nodestore"
 )
 
 //go:embed index.html
@@ -19,11 +20,40 @@ var indexHTML string
 //go:embed editor_app.js
 var editorAppJS string
 
+// Section serves the workflow editor. Unlike the other sections it
+// writes a standalone page (the embedded flowadmin index document)
+// rather than going through the UiConfig layout, so it carries its
+// own dependencies.
+type Section struct {
+	// store feeds the navbar/section-nav count badges; nil renders
+	// the links badge-free.
+	store nodestore.StoreInterface
+	// chrome controls whether nodeadmin injects its own navbar and
+	// section pills (true) or emits the page bare for a host that
+	// owns the outer chrome (false) — Options.DisableChrome.
+	chrome bool
+}
+
+// New builds the editor section. chrome=false emits the editor page
+// without nodeadmin's navbar or section pills so an embedding host
+// can supply its own chrome.
+func New(store nodestore.StoreInterface, chrome bool) *Section {
+	return &Section{store: store, chrome: chrome}
+}
+
+// Editor serves the editor page with nodeadmin chrome and no store —
+// the standalone handler kept for direct mounts. Mounts through
+// nodeadmin.New dispatch to the Section built in buildRoutes, which
+// carries the real store and the Options.DisableChrome flag.
+func Editor(w http.ResponseWriter, r *http.Request) {
+	New(nil, true).Editor(w, r)
+}
+
 // Editor serves the editor page or one of its assets. action=appjs
 // serves the editor application script; anything else serves the
 // index document. The NodeAdminURL context value supplies the API
 // base so every fetch targets <endpoint>/api/*.
-func Editor(w http.ResponseWriter, r *http.Request) {
+func (s *Section) Editor(w http.ResponseWriter, r *http.Request) {
 	endpoint, _ := r.Context().Value(shared.KeyNodeAdminURL).(string)
 	if endpoint == "" {
 		endpoint = "/nodes"
@@ -41,18 +71,25 @@ func Editor(w http.ResponseWriter, r *http.Request) {
 	page := strings.ReplaceAll(indexHTML,
 		`src="/editor/editor_app.js"`,
 		`src="?controller=editor&action=appjs"`)
-	// The flowadmin app-navigation component is gone; inject the same
-	// server-side top navbar (brand + section links + theme switcher)
-	// the shared layout emits, so the editor keeps the app chrome.
-	// It goes ABOVE #app, not inside it: Vue re-renders #app on mount,
-	// which would drop the listeners bootlegance wires onto the
-	// theme-switcher controls at DOMContentLoaded.
-	page = strings.Replace(page,
-		`<app-navigation active="editor"></app-navigation>`,
-		shared.SectionNav(r, nil).ToHTML(), 1)
-	page = strings.Replace(page,
-		`<div id="app">`,
-		shared.Navbar(r, nil).ToHTML()+`<div id="app">`, 1)
+	// The flowadmin app-navigation component is gone. With chrome on
+	// (the default) inject the same server-side top navbar (brand +
+	// section links + theme switcher) the shared layout emits, so the
+	// editor keeps the app chrome. It goes ABOVE #app, not inside it:
+	// Vue re-renders #app on mount, which would drop the listeners
+	// bootlegance wires onto the theme-switcher controls at
+	// DOMContentLoaded. With chrome off (Options.DisableChrome) the
+	// host owns the outer chrome, so the page ships bare.
+	if s.chrome {
+		page = strings.Replace(page,
+			`<app-navigation active="editor"></app-navigation>`,
+			shared.SectionNav(r, s.store).ToHTML(), 1)
+		page = strings.Replace(page,
+			`<div id="app">`,
+			shared.Navbar(r, s.store).ToHTML()+`<div id="app">`, 1)
+	} else {
+		page = strings.Replace(page,
+			`<app-navigation active="editor"></app-navigation>`, ``, 1)
+	}
 	page = strings.Replace(page,
 		`<script src="/js/components/navigation.js"></script>`, ``, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
