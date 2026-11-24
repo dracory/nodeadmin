@@ -6,6 +6,7 @@ require (
 	github.com/dracory/cdn v1.13.0
 	github.com/dracory/entitystore v1.24.0
 	github.com/dracory/hb v1.88.0
+	github.com/dracory/neat v0.61.0
 	github.com/dracory/nodebase v0.2.1
 	github.com/dracory/noderun v0.1.0
 	github.com/dracory/nodestore v0.2.0
@@ -19,7 +20,6 @@ require (
 	github.com/dlclark/regexp2/v2 v2.11.0 // indirect
 	github.com/dop251/goja v0.0.0-20261124141918-d9d211bc2d23 // indirect
 	github.com/dracory/dataobject v1.7.0 // indirect
-	github.com/dracory/neat v0.61.0 // indirect
 	github.com/dracory/uid v1.14.0 // indirect
 	github.com/dromara/carbon/v2 v2.7.1 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect

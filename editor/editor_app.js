@@ -685,6 +685,19 @@ function initEditorApp() {
             },
 
             /**
+             * GET variant of api() for the read-only pending-count
+             * endpoint — same envelope unwrap, no body.
+             */
+            async apiGet(path) {
+                const res = await fetch(path, { headers: { 'Accept': 'application/json' } });
+                const envelope = await res.json();
+                if (!res.ok || envelope.status !== 'success') {
+                    throw new Error(envelope.message || ('Request failed: ' + res.status));
+                }
+                return envelope.data || {};
+            },
+
+            /**
              * Load the workflow list from the API
              */
             async loadWorkflows() {
@@ -3475,6 +3488,7 @@ function initEditorApp() {
                     this.applyNodeStatuses(data.nodes || {});
                     this.runnerId = data.runner_id || null;
                     this.pollQueueDepths();
+                    this.pollPendingCounts();
                     if (Array.isArray(data.events)) this.appendDebugEvents(data.events);
                     if (typeof data.last_seq === 'number') this.lastEventSeq = data.last_seq;
                     if (data.status !== 'running') {
@@ -3522,6 +3536,49 @@ function initEditorApp() {
                         badge.classList.remove('text-bg-warning');
                         badge.classList.add('text-bg-secondary');
                     });
+                document.querySelectorAll('#drawflow .pending-badge')
+                    .forEach(badge => badge.remove());
+            },
+
+            /* ---- Per-node pending-count badges (inbox backlog) ---- */
+
+            /**
+             * Fetch {nodeId: count} from GET /api/workflows/{id}/pending
+             * and refresh every node's corner badge. Runs on the status
+             * poll cycle, so it only fires while a workflow is running;
+             * failures leave the previous badges in place.
+             */
+            async pollPendingCounts() {
+                if (!this.selectedWorkflow || !this.running) return;
+                try {
+                    const counts = await this.apiGet(
+                        '/api/workflows/' + encodeURIComponent(this.selectedWorkflow.id) + '/pending');
+                    this.applyPendingCounts(counts || {});
+                } catch (err) {
+                    console.warn('Pending-count poll failed:', err.message);
+                }
+            },
+
+            /**
+             * Draw/update the corner pill on every canvas node: visible
+             * when the node has queued inbox rows, hidden at 0. Nodes
+             * absent from the counts map get a hidden badge.
+             */
+            applyPendingCounts(counts) {
+                document.querySelectorAll('#drawflow .drawflow-node').forEach(el => {
+                    const dfId = String(el.id || '').replace(/^node-/, '');
+                    const backendId = this.drawflowToBackend[dfId] || dfId;
+                    const count = counts[backendId] || 0;
+                    let badge = el.querySelector('.pending-badge');
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.className = 'pending-badge badge text-bg-info d-none';
+                        el.appendChild(badge);
+                    }
+                    badge.textContent = String(count);
+                    badge.title = count + ' pending message' + (count === 1 ? '' : 's');
+                    badge.classList.toggle('d-none', count <= 0);
+                });
             },
 
             /* ---- Queue nodes: depth badges + inspection panel ---- */

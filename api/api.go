@@ -112,6 +112,11 @@ func (a *Api) buildRoutes() *http.ServeMux {
 	mux.HandleFunc("POST /api/message-update", a.updateMessage)
 	mux.HandleFunc("POST /api/message-delete", a.deleteMessage)
 
+	// Per-node inbox backlog depth (editor badges): the only GET under
+	// /api besides health — read-only, no body, so it rides the same
+	// 1.5s status poll without a POST round-trip.
+	mux.HandleFunc("GET /api/workflows/{id}/pending", a.workflowPending)
+
 	// Workflow lifecycle (deployed flag)
 	mux.HandleFunc("POST /api/workflow-start", a.workflowStart)
 	mux.HandleFunc("POST /api/workflow-stop", a.workflowStop)
