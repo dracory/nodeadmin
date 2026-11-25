@@ -8,7 +8,7 @@ import (
 )
 
 // getAPI issues a GET against the API and returns the decoded
-// gouniverse/api envelope plus the recorder — the read-side twin of
+// dracory/api envelope plus the recorder — the read-side twin of
 // postAPI for the pending-count endpoint.
 func getAPI(t *testing.T, handler http.Handler, path string) (map[string]interface{}, *httptest.ResponseRecorder) {
 	t.Helper()

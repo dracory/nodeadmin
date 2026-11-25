@@ -27,7 +27,7 @@ router — ServeMux, chi, gin, echo.
 - `api/` — JSON API under `/api/*`: workflow/message CRUD,
   start/stop/status, node palette + schemas, inject, run journal,
   queues, groups, global env, Node-RED import. Responses keep the
-  gouniverse/api envelope (`status`/`message`/`data`).
+  dracory/api envelope (`status`/`message`/`data`).
 - `editor/` — the Drawflow-based flow editor (Vue 3 +
   dracory/floweditor fork via CDN, no build step)
 - `home/` — admin dashboard landing section

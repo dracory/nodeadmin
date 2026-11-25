@@ -58,7 +58,7 @@ func newEngineTestAdmin(t *testing.T) (Interface, *noderunner.WorkflowEngine, no
 }
 
 // postAPI posts a JSON body to an API endpoint and returns the decoded
-// gouniverse/api envelope.
+// dracory/api envelope.
 func postAPI(t *testing.T, handler http.Handler, path string, body map[string]interface{}) map[string]interface{} {
 	t.Helper()
 	raw, _ := json.Marshal(body)

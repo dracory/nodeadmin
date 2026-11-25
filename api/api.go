@@ -1,5 +1,5 @@
 // Package api provides the JSON API for the node admin surface —
-// POST endpoints returning gouniverse/api envelopes, same convention
+// POST endpoints returning dracory/api envelopes, same convention
 // as flowadmin/api but backed by nodestore.
 package api
 
@@ -149,7 +149,7 @@ func (a *Api) buildRoutes() *http.ServeMux {
 	return mux
 }
 
-// respond writes a gouniverse/api envelope as JSON
+// respond writes a dracory/api envelope as JSON
 func respond(w http.ResponseWriter, res interface{ ToString() string }) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write([]byte(res.ToString()))

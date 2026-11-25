@@ -4,7 +4,7 @@
 // section.UI(uiConfig).SettingsManager(w, r) for ?controller=settings —
 // no action renders the page through the UiConfig layout,
 // ?action=load-settings and ?action=save-setting answer JSON AJAX
-// requests in the gouniverse/api envelope under the same controller URL.
+// requests in the dracory/api envelope under the same controller URL.
 //
 // Editable values are runtime engine overrides persisted inside the
 // config store's "global_config" blob (the "engine" section next to
@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"strings"
 
-	guapi "github.com/gouniverse/api"
+	guapi "github.com/dracory/api"
 
 	"github.com/dracory/nodeadmin/shared"
 	"github.com/dracory/nodestore"
@@ -291,7 +291,7 @@ func (s *Section) applyEngineOverrides(req saveSettingRequest) {
 	}
 }
 
-// respond writes a gouniverse/api envelope as JSON
+// respond writes a dracory/api envelope as JSON
 func respond(w http.ResponseWriter, res interface{ ToString() string }) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write([]byte(res.ToString()))

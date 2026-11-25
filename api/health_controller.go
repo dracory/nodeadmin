@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	guapi "github.com/gouniverse/api"
+	guapi "github.com/dracory/api"
 )
 
 // healthCheck is a liveness probe endpoint

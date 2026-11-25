@@ -52,7 +52,7 @@ func newTestStore(t *testing.T) nodestore.StoreInterface {
 }
 
 // postAPI posts a JSON body to an API endpoint and returns the decoded
-// gouniverse/api envelope plus the recorder.
+// dracory/api envelope plus the recorder.
 func postAPI(t *testing.T, handler http.Handler, path string, body map[string]interface{}) (map[string]interface{}, *httptest.ResponseRecorder) {
 	t.Helper()
 	raw, _ := json.Marshal(body)
