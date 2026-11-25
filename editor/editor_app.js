@@ -1900,49 +1900,38 @@ function initEditorApp() {
             },
 
             /**
-             * Resize an errorCatch node's output ports when the flag
-             * toggles — same surgery as syncSwitchOutputs.
+             * Desired output-port count for node types whose ports are
+             * config-driven (the "outputsFrom" convention). Returns null
+             * for fixed-port types so saveNodeProperties can call
+             * syncDynamicOutputs unconditionally. New dynamic-port types
+             * hook in here (plus a <type>OutputLabels for data.outputs).
              */
-            syncErrorCatchOutputs(nodeId) {
-                const node = this.editor.getNodeFromId(nodeId);
-                if (!node) return;
-                const type = this.findType(node.data && node.data.type) ||
-                    { id: node.data && node.data.type, outputs: 1 };
-                const desired = this.errorCatchOutputCount(type, node.data);
-                const current = Object.keys(node.outputs || {}).length;
-                if (desired === current) {
-                    this.refreshOutputLabels(nodeId);
-                    return;
+            dynamicOutputCount(node) {
+                const typeId = node && node.data && node.data.type;
+                const data = (node && node.data) || {};
+                if (typeId === 'switch') return this.switchOutputCount(data);
+                if (typeId === 'checkpoint') return this.checkpointOutputCount(data);
+                if (this.supportsErrorCatch(typeId)) {
+                    const type = this.findType(typeId) || { id: typeId, outputs: 1 };
+                    return this.errorCatchOutputCount(type, data);
                 }
-                if (typeof this.editor.addNodeOutput !== 'function' ||
-                    typeof this.editor.removeNodeOutput !== 'function') {
-                    console.error('syncErrorCatchOutputs: Drawflow build lacks addNodeOutput/removeNodeOutput');
-                    if (typeof this.showToast === 'function') {
-                        this.showToast('Could not update node ports — save and reload the page');
-                    }
-                    return;
-                }
-                Object.keys(node.outputs || {}).forEach(outputKey => {
-                    const idx = parseInt(String(outputKey).replace('output_', ''), 10);
-                    if (idx > desired) {
-                        ((node.outputs[outputKey] && node.outputs[outputKey].connections) || [])
-                            .forEach(c => this.editor.removeSingleConnection(
-                                nodeId, c.node, outputKey, c.output));
-                    }
-                });
-                for (let i = current + 1; i <= desired; i++) this.editor.addNodeOutput(nodeId);
-                for (let i = current; i > desired; i--) this.editor.removeNodeOutput(nodeId, 'output_' + i);
-                this.refreshOutputLabels(nodeId);
+                return null;
             },
 
             /**
-             * Resize a checkpoint node's output ports to match its
-             * routes config — same surgery as syncSwitchOutputs.
+             * Resize a node's output ports to match its config-driven
+             * count (switch rules + otherwise, checkpoint routes,
+             * errorCatch flag). Connections on ports beyond the new
+             * count are dropped first with a console note (Node-RED
+             * behaviour: dangling wires removed); Drawflow's
+             * addNodeOutput / removeNodeOutput do the DOM/graph
+             * surgery in place so the canvas updates without reload.
              */
-            syncCheckpointOutputs(nodeId) {
+            syncDynamicOutputs(nodeId) {
                 const node = this.editor.getNodeFromId(nodeId);
                 if (!node) return;
-                const desired = this.checkpointOutputCount(node.data);
+                const desired = this.dynamicOutputCount(node);
+                if (desired === null || desired === undefined) return;
                 const current = Object.keys(node.outputs || {}).length;
                 if (desired === current) {
                     this.refreshOutputLabels(nodeId);
@@ -1950,56 +1939,28 @@ function initEditorApp() {
                 }
                 if (typeof this.editor.addNodeOutput !== 'function' ||
                     typeof this.editor.removeNodeOutput !== 'function') {
-                    console.error('syncCheckpointOutputs: Drawflow build lacks addNodeOutput/removeNodeOutput');
+                    console.error('syncDynamicOutputs: Drawflow build lacks addNodeOutput/removeNodeOutput');
                     if (typeof this.showToast === 'function') {
                         this.showToast('Could not update node ports — save and reload the page');
                     }
                     return;
                 }
+                let dropped = 0;
                 Object.keys(node.outputs || {}).forEach(outputKey => {
                     const idx = parseInt(String(outputKey).replace('output_', ''), 10);
                     if (idx > desired) {
                         ((node.outputs[outputKey] && node.outputs[outputKey].connections) || [])
-                            .forEach(c => this.editor.removeSingleConnection(
-                                nodeId, c.node, outputKey, c.output));
+                            .forEach(c => {
+                                this.editor.removeSingleConnection(
+                                    nodeId, c.node, outputKey, c.output);
+                                dropped++;
+                            });
                     }
                 });
-                for (let i = current + 1; i <= desired; i++) this.editor.addNodeOutput(nodeId);
-                for (let i = current; i > desired; i--) this.editor.removeNodeOutput(nodeId, 'output_' + i);
-                this.refreshOutputLabels(nodeId);
-            },
-
-            /**
-             * Resize a switch node's output ports to match its rules +
-             * otherwise config. Connections on ports beyond the new
-             * count are dropped first; Drawflow's addNodeOutput /
-             * removeNodeOutput do the DOM/graph surgery in place.
-             */
-            syncSwitchOutputs(nodeId) {
-                const node = this.editor.getNodeFromId(nodeId);
-                if (!node) return;
-                const desired = this.switchOutputCount(node.data);
-                const current = Object.keys(node.outputs || {}).length;
-                if (desired === current) {
-                    this.refreshOutputLabels(nodeId);
-                    return;
+                if (dropped > 0) {
+                    console.info('syncDynamicOutputs: dropped ' + dropped +
+                        ' wire(s) on removed output port(s) of node ' + nodeId);
                 }
-                if (typeof this.editor.addNodeOutput !== 'function' ||
-                    typeof this.editor.removeNodeOutput !== 'function') {
-                    console.error('syncSwitchOutputs: Drawflow build lacks addNodeOutput/removeNodeOutput');
-                    if (typeof this.showToast === 'function') {
-                        this.showToast('Could not update node ports — save and reload the page');
-                    }
-                    return;
-                }
-                Object.keys(node.outputs || {}).forEach(outputKey => {
-                    const idx = parseInt(String(outputKey).replace('output_', ''), 10);
-                    if (idx > desired) {
-                        ((node.outputs[outputKey] && node.outputs[outputKey].connections) || [])
-                            .forEach(c => this.editor.removeSingleConnection(
-                                nodeId, c.node, outputKey, c.output));
-                    }
-                });
                 for (let i = current + 1; i <= desired; i++) this.editor.addNodeOutput(nodeId);
                 for (let i = current; i > desired; i--) this.editor.removeNodeOutput(nodeId, 'output_' + i);
                 this.refreshOutputLabels(nodeId);
@@ -3364,15 +3325,9 @@ function initEditorApp() {
                     data.outputs = this.errorCatchOutputLabels(errorCatchType, data);
                 }
                 this.editor.updateNodeDataFromId(this.editingNodeId, data);
-                if (this.editingNodeType === 'switch') {
-                    this.syncSwitchOutputs(this.editingNodeId);
-                }
-                if (this.editingNodeType === 'checkpoint') {
-                    this.syncCheckpointOutputs(this.editingNodeId);
-                }
-                if (errorCatchType) {
-                    this.syncErrorCatchOutputs(this.editingNodeId);
-                }
+                // Resize output ports for config-driven types (switch,
+                // checkpoint, errorCatch) — no-op for fixed-port types.
+                this.syncDynamicOutputs(this.editingNodeId);
                 this.refreshNodeDom(this.editingNodeId, data);
                 this.refreshDisabledDom();
                 // updateNodeDataFromId does NOT emit nodeDataChanged
