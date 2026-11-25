@@ -23,7 +23,7 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	waitVueApp(t, page)
 
 	// Vue mounted: no workflow is open yet, so the workspace is
-	// hidden and the welcome screen shows (editor_empty_state).
+	// hidden and the welcome screen shows.
 	waitElement(t, page, ".editor-welcome")
 
 	// New workflow via the explorer "+" dropdown (JS clicks —
@@ -87,7 +87,7 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	}
 }
 
-// TestEditorEmptyState covers the welcome screen (editor_empty_state):
+// TestEditorEmptyState covers the welcome screen:
 // with no workflow selected the editor workspace (tabs, toolbar,
 // canvas) is hidden and the welcome screen fills the pane instead.
 // Creating a workflow restores the workspace; closing the last tab

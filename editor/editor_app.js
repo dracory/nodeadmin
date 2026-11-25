@@ -114,7 +114,7 @@ function initEditorApp() {
                 // Since the module navigator landed, tabs are only the
                 // OPEN modules (VS Code model) — the sidebar tree lists
                 // every materialized module and is the source of truth.
-                // Empty by default (editor_empty_state): no selected
+                // Empty by default: no selected
                 // workflow means no open tabs, and no open tabs means
                 // the workspace is replaced by the welcome screen.
                 flowTabs: [],
@@ -2718,7 +2718,7 @@ function initEditorApp() {
                     return;
                 }
                 // Drawflow-JSON imports target the open editor — with no
-                // workflow selected there is none (editor_empty_state).
+                // workflow selected there is none.
                 // The Node-RED path above is the empty-state import.
                 if (!this.selectedWorkflow) {
                     this.importError = 'Drawflow JSON needs an open workflow — paste a Node-RED flow export (JSON array) to create one, or create/select a workflow first';
@@ -4224,7 +4224,7 @@ function initEditorApp() {
                     const idx = this.flowTabs.findIndex(t => t.module === tab.module);
                     const next = this.flowTabs[idx === 0 ? 1 : idx - 1];
                     // Closing the last tab empties the workspace — the
-                    // welcome screen takes over (editor_empty_state).
+                    // welcome screen takes over.
                     if (next && next !== tab) {
                         this.switchTab(next);
                     } else {
