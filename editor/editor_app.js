@@ -386,6 +386,18 @@ function initEditorApp() {
         },
         computed: {
             /**
+             * Modal title for the properties dialog — Node-RED style
+             * "Edit <Type> Node" in consistent title case: every word
+             * of the registered type's name (or the raw type id)
+             * capitalized, so mixed-case names still read as a title.
+             */
+            editingNodeDisplayName() {
+                const t = this.findType(this.editingNodeType);
+                const raw = (t && t.name) || this.editingNodeType || 'node';
+                return raw.replace(/\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1));
+            },
+
+            /**
              * Node types filtered by the palette search box (name/description)
              */
             filteredNodeTypes() {
