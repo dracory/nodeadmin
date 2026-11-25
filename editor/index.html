@@ -121,8 +121,8 @@
         .flow-tab-close:hover { color: #dc3545; }
         .flow-tab-add { color: #0d6efd; }
         .flow-tab.disabled { color: #adb5bd; font-style: italic; }
-        /* Module navigator tree (modules_as_first_class): the sidebar
-           lists every module; tabs are only the open ones */
+        /* Child flow navigator tree (modules_as_first_class): the sidebar
+           lists every child flow; tabs are only the open ones */
         .module-tree { font-size: .85rem; }
         .module-tree-root {
             font-weight: 600;
@@ -168,7 +168,7 @@
             font-size: .78rem;
         }
         /* Unified file tree (sidebar_file_tree): one Explorer list —
-           workflow roots, user folders, module leaves */
+           workflow roots, user folders, child-flow leaves */
         .tree-chevron {
             width: 12px;
             flex: none;
@@ -554,21 +554,21 @@
             <div class="col-md-3 col-lg-2 sidebar p-3">
                 <!-- Sidebar super-groups (sidebar_super_groups): the
                      Explorer is split into two fixed sections —
-                     Workflows and Subflows — VSCode split-pane style.
-                     Each section header carries its own "+" create
-                     affordance (new workflow / workflow group; new
-                     subflow). Inside Workflows, workflow groups
-                     (server-persisted, organization only) contain
-                     workflow rows; the selected workflow expands into
-                     user folders (view.treeGroups, organization only)
-                     and flow-module leaves; a subflow module always
-                     renders under Subflows by kind even if a folder
-                     claims it. Click a leaf to open its tab;
-                     right-click a leaf for the module context menu;
-                     right-click a folder for folder actions, a
-                     workflow row for workflow/group actions. A blue
-                     dot marks open modules; a ban marks disabled
-                     ones. -->
+                     Workflows and Components — VSCode split-pane
+                     style. Each section header carries its own "+"
+                     create affordance (new workflow / workflow group;
+                     new component). Inside Workflows, workflow
+                     groups (server-persisted, organization only)
+                     contain workflow rows; the selected workflow
+                     expands into user folders (view.treeGroups,
+                     organization only) and child-flow leaves; a
+                     component always renders under Components
+                     by kind even if a folder claims it. Click a
+                     leaf to open its tab; right-click a leaf for the
+                     child-flow context menu; right-click a folder for
+                     folder actions, a workflow row for workflow/group
+                     actions. A blue dot marks open child flows; a ban
+                     marks disabled ones. -->
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="mb-0">Explorer</h5>
                 </div>
@@ -614,7 +614,7 @@
                              : (row.type === 'wgroup'
                                  ? 'Workflow group — drag workflows in, right-click for actions'
                                  : (row.type === 'folder'
-                                     ? 'Group folder — drag modules in, right-click for actions'
+                                     ? 'Group folder — drag child flows in, right-click for actions'
                                      : 'Click to open, right-click for actions, drag into a folder'))"
                          @click="onTreeRowClick(row)"
                          @dblclick="onTreeRowDblClick(row)"
@@ -639,31 +639,31 @@
                             <i v-if="row.selected" class="fas fa-cog ms-auto" role="button"
                                title="Workflow properties" @click.stop="openWorkflowProps"></i>
                             <i v-else class="fas fa-plus text-secondary ms-auto" role="button"
-                               title="Add a subflow to this workflow"
+                               title="Add a component to this workflow"
                                @click.stop="addSubflowToWorkflow(row.workflow)"></i>
                         </template>
                         <template v-else-if="row.type === 'module'">
-                            <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Module disabled"></i>
+                            <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Child flow disabled"></i>
                             <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
                         </template>
                     </div>
                     <div v-if="!workflows.length && !workflowGroups.length" class="module-empty">No workflows — + to create</div>
                     </template>
 
-                    <!-- Super-group: Subflows — the selected workflow's
-                         role:"subflow" definition modules (they live
+                    <!-- Super-group: Components — the selected workflow's
+                         role:"subflow" definition canvases (they live
                          inside the workflow document; there are no
-                         global subflows). Kind beats folder
-                         membership: a subflow in a folder still shows
+                         global components). Kind beats folder
+                         membership: a component in a folder still shows
                          here. -->
                     <div class="module-group-header px-0 mt-2">
                         <span>
                             <i class="fas fa-chevron-right tree-chevron me-1"
                                :class="{ open: !collapsedTreeNodes['sg:subflows'] }"
-                               @click="toggleTreeNode('sg:subflows')"></i>Subflows
+                               @click="toggleTreeNode('sg:subflows')"></i>Components
                         </span>
                         <button class="btn btn-sm btn-outline-primary py-0 px-1" :disabled="!selectedWorkflow"
-                                @click="createSubflow()" title="New subflow definition (canvas module with port markers)">
+                                @click="createSubflow()" title="New component (child flow with port markers)">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
@@ -688,11 +688,11 @@
                         <span class="tree-chevron-spacer"></span>
                         <i class="fas fa-object-group text-secondary"></i>
                         <span class="text-truncate">{{ row.label }}</span>
-                        <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Module disabled"></i>
+                        <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Component disabled"></i>
                         <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
                     </div>
                     <div v-if="!subflowTreeRows.length" class="module-empty">
-                        {{ selectedWorkflow ? 'No subflows — + to create' : 'Select a workflow to see its subflows' }}
+                        {{ selectedWorkflow ? 'No components — + to create' : 'Select a workflow to see its components' }}
                     </div>
                     </template>
                 </div>
@@ -713,10 +713,10 @@
                 <div class="flow-tabs d-flex align-items-end">
                     <button v-for="tab in flowTabs" :key="tab.module"
                             class="flow-tab" :class="{ active: activeTab === tab.module, disabled: tab.disabled }"
-                            title="Click to switch, double-click to rename, right-click to disable/enable. Closing a tab keeps the module in the tree."
+                            title="Click to switch, double-click to rename, right-click to disable/enable. Closing a tab keeps the child flow in the tree."
                             @click="switchTab(tab)" @dblclick="renameFlowTab(tab)"
                             @contextmenu.prevent="toggleFlowTabDisabled(tab)">
-                        <i v-if="tab.role === 'subflow'" class="fas fa-object-group me-1" title="Subflow template module"></i>{{ tab.label }}
+                        <i v-if="tab.role === 'subflow'" class="fas fa-object-group me-1" title="Component"></i>{{ tab.label }}
                         <i v-if="tab.disabled" class="fas fa-ban ms-1" title="Flow disabled"></i>
                         <span class="flow-tab-close"
                               title="Close flow" @click.stop="closeFlowTab(tab)">&times;</span>
@@ -762,7 +762,7 @@
                     </div>
                     <div class="btn-group ms-2">
                         <button class="btn btn-outline-secondary" data-bs-toggle="dropdown"
-                                aria-expanded="false" title="Environment variables (env.get chain: group > subflow > flow > global > OS)">
+                                aria-expanded="false" title="Environment variables (env.get chain: group > component > flow > global > OS)">
                             <i class="fas fa-list"></i>
                         </button>
                         <ul class="dropdown-menu">
@@ -789,7 +789,7 @@
                             <li><a class="dropdown-item" href="#" :class="{ disabled: !selectedWorkflow }"
                                     :disabled="!selectedWorkflow"
                                     @click.prevent="selectedWorkflow && openModuleImport()">
-                                <i class="fas fa-file-import me-2"></i>Import module…
+                                <i class="fas fa-file-import me-2"></i>Import child flow…
                             </a></li>
                         </ul>
                     </div>
@@ -802,9 +802,9 @@
                 <div v-if="activeModuleRole === 'subflow'"
                      class="alert alert-secondary py-1 px-2 mb-0 small text-muted">
                     <i class="fas fa-object-group me-1"></i>
-                    Editing subflow definition — add <em>Subflow input</em>/<em>Subflow output</em>
+                    Editing component — add <em>Component input</em>/<em>Component output</em>
                     nodes from Add Node to define its ports. Place instances from the
-                    <em>Subflows</em> palette category in any flow.
+                    <em>Components</em> palette category in any flow.
                 </div>
                 <div id="drawflow"></div>
 
@@ -897,7 +897,7 @@
                     </button>
                 </div>
 
-                <!-- Module tree context menu (module navigator) -->
+                <!-- Child flow tree context menu (module navigator) -->
                 <div v-if="moduleContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: moduleContextMenu.x + 'px', top: moduleContextMenu.y + 'px' }">
                     <button class="dropdown-item"
@@ -910,11 +910,11 @@
                     </button>
                     <button class="dropdown-item"
                             @click="exportModule(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas fa-file-export me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Export definition…' : 'Export module…' }}
+                        <i class="fas fa-file-export me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Export component…' : 'Export child flow…' }}
                     </button>
                     <button v-if="moduleRoleFor(moduleContextMenu.module) === 'subflow'" class="dropdown-item"
                             @click="openModuleEnv(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas fa-list me-2"></i>Subflow env…
+                        <i class="fas fa-list me-2"></i>Component env…
                     </button>
                     <button class="dropdown-item"
                             @click="toggleModuleDisabled(moduleContextMenu.module); closeModuleContextMenu()">
@@ -932,7 +932,7 @@
                     </button>
                     <button class="dropdown-item text-danger"
                             @click="deleteModuleByName(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas fa-trash me-2"></i>Delete module
+                        <i class="fas fa-trash me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Delete component' : 'Delete child flow' }}
                     </button>
                 </div>
 
@@ -943,11 +943,11 @@
                      :style="{ left: folderContextMenu.x + 'px', top: folderContextMenu.y + 'px' }">
                     <button class="dropdown-item"
                             @click="createModuleInFolder('flow', folderContextMenu.folderId); closeFolderContextMenu()">
-                        <i class="fas fa-plus me-2"></i>New flow module here
+                        <i class="fas fa-plus me-2"></i>New child flow here
                     </button>
                     <button class="dropdown-item"
                             @click="createModuleInFolder('subflow', folderContextMenu.folderId); closeFolderContextMenu()">
-                        <i class="fas fa-object-group me-2"></i>New subflow here
+                        <i class="fas fa-object-group me-2"></i>New component here
                     </button>
                     <button class="dropdown-item"
                             @click="createTreeFolder(folderContextMenu.folderId); closeFolderContextMenu()">
@@ -974,7 +974,7 @@
                     </button>
                     <button class="dropdown-item"
                             @click="createTreeFolderFor(workflowById(workflowContextMenu.workflowId)); closeWorkflowContextMenu()">
-                        <i class="fas fa-folder-plus me-2"></i>New module folder
+                        <i class="fas fa-folder-plus me-2"></i>New child-flow folder
                     </button>
                     <hr class="dropdown-divider my-1">
                     <button v-if="workflowGroupFor(workflowContextMenu.workflowId)" class="dropdown-item"
@@ -1115,7 +1115,7 @@
                               placeholder='Paste the JSON produced by Export...'></textarea>
                     <div class="invalid-feedback">{{ importError }}</div>
                     <small class="form-text text-muted">Accepts a canvas export or a Node-RED
-                        flow JSON array (imported as a new workflow, subflows included).</small>
+                        flow JSON array (imported as a new workflow, components included).</small>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1125,27 +1125,27 @@
         </div>
     </div>
 
-    <!-- Import module modal (module_export_import): merges a module
-         envelope into the CURRENT workflow as a new module — unlike
+    <!-- Import child flow modal (module_export_import): merges a module
+         envelope into the CURRENT workflow as a new child flow — unlike
          the toolbar Import, which replaces the canvas or creates a
          new workflow. -->
     <div class="modal fade" id="moduleImportModal" tabindex="-1" ref="moduleImportModal">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Import Module</h5>
+                    <h5 class="modal-title">Import Child Flow</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <label class="form-label">Module export JSON</label>
+                    <label class="form-label">Child flow export JSON</label>
                     <textarea class="form-control font-monospace" rows="10"
                               v-model="moduleImportJson"
                               :class="{ 'is-invalid': moduleImportError }"
                               placeholder='Paste a module export ({ "nodestore": "module", ... })...'></textarea>
                     <div class="invalid-feedback">{{ moduleImportError }}</div>
-                    <small class="form-text text-muted">Adds a new module to the selected workflow.
-                        Node and module ids are re-minted; references to nodes outside the
-                        exported module stay as-is and are reported if they cannot resolve.</small>
+                    <small class="form-text text-muted">Adds a new child flow to the selected workflow.
+                        Node and child-flow ids are re-minted; references to nodes outside the
+                        exported child flow stay as-is and are reported if they cannot resolve.</small>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1618,7 +1618,7 @@
         </div>
     </div>
 
-    <!-- Env table modal (flow / group / module / global env — Node-RED env.get chain) -->
+    <!-- Env table modal (flow / group / child flow / global env — Node-RED env.get chain) -->
     <div class="modal fade" id="envModal" tabindex="-1" ref="envModal">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">

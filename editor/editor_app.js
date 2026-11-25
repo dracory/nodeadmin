@@ -40,16 +40,16 @@ const NODE_SIZE = { w: 200, h: 90 };
  */
 const SUBFLOW_PORT_TYPES = [
     {
-        id: 'subflowIn', name: 'Subflow input',
-        description: 'Input port of this subflow definition',
+        id: 'subflowIn', name: 'Component input',
+        description: 'Input port of this component',
         inputs: 0, outputs: 1, color: '#7e8ba0',
-        icon: 'sign-in-alt', category: 'Subflow ports'
+        icon: 'sign-in-alt', category: 'Component ports'
     },
     {
-        id: 'subflowOut', name: 'Subflow output',
-        description: 'Output port of this subflow definition',
+        id: 'subflowOut', name: 'Component output',
+        description: 'Output port of this component',
         inputs: 1, outputs: 0, color: '#7e8ba0',
-        icon: 'sign-out-alt', category: 'Subflow ports'
+        icon: 'sign-out-alt', category: 'Component ports'
     }
 ];
 
@@ -461,7 +461,7 @@ function initEditorApp() {
                 const order = [
                     'Common', 'Function', 'Actions', 'Network', 'Sequence',
                     'Parsers', 'Storage', 'Dashboard', 'Triggers', 'Queue',
-                    'Document', 'Flow Control', 'AI', 'Subflows', 'Subflow ports'
+                    'Document', 'Flow Control', 'AI', 'Components', 'Component ports'
                 ];
                 const buckets = {};
                 this.filteredNodeTypes.forEach(t => {
@@ -494,10 +494,10 @@ function initEditorApp() {
                     const outs = Array.isArray(data.out) ? data.out.length : 0;
                     return {
                         id: 'subflow:' + d.id,
-                        name: 'subflow: ' + (data.name || d.id),
-                        description: 'Instance of subflow "' + (data.name || d.id) + '"',
+                        name: 'component: ' + (data.name || d.id),
+                        description: 'Instance of component "' + (data.name || d.id) + '"',
                         icon: 'object-group',
-                        category: 'Subflows',
+                        category: 'Components',
                         inputs: ins,
                         outputs: outs,
                         color: '#7e8ba0'
@@ -1231,12 +1231,12 @@ function initEditorApp() {
                         const data = d.data || {};
                         this.pendingSubflowTypes['subflow:' + d.id] = {
                             id: 'subflow:' + d.id,
-                            name: 'subflow: ' + (data.name || d.id),
+                            name: 'component: ' + (data.name || d.id),
                             inputs: Array.isArray(data.in) ? data.in.length : 0,
                             outputs: Array.isArray(data.out) ? data.out.length : 0,
                             color: '#7e8ba0',
                             icon: 'object-group',
-                            category: 'Subflows'
+                            category: 'Components'
                         };
                     });
                     const defModuleKeys = subflowDefNodes.map(d => this.prepareSubflowDefModule(d));
@@ -1379,7 +1379,7 @@ function initEditorApp() {
             prepareSubflowDefModule(def) {
                 const data = def.data || {};
                 const df = this.editor.drawflow.drawflow;
-                const base = String(data.name || '').trim() || 'Subflow';
+                const base = String(data.name || '').trim() || 'Component';
                 let key = base;
                 for (let i = 2; df[key]; i++) key = base + ' ' + i;
                 this.editor.addModule(key);
@@ -2507,7 +2507,7 @@ function initEditorApp() {
                     target: 'module',
                     groupId: null,
                     moduleKey: moduleKey,
-                    title: 'Subflow Environment Variables — ' + (meta.label || moduleKey),
+                    title: 'Component Environment Variables — ' + (meta.label || moduleKey),
                     rows: this.envRowsClone(meta.env)
                 };
                 bootstrap.Modal.getOrCreateInstance(this.$refs.envModal).show();
@@ -2707,10 +2707,10 @@ function initEditorApp() {
              */
             createSubflow() {
                 if (!this.selectedWorkflow) return;
-                const name = prompt('Subflow name', 'Subflow');
+                const name = prompt('Component name', 'Component');
                 if (name === null) return;
                 const df = this.editor.drawflow.drawflow || {};
-                const base = String(name || '').trim() || 'Subflow';
+                const base = String(name || '').trim() || 'Component';
                 let key = base;
                 for (let i = 2; df[key]; i++) key = base + ' ' + i;
                 this.editor.addModule(key);
@@ -2743,7 +2743,7 @@ function initEditorApp() {
                 this.switchTab(tab);
                 this.pushHistory();
                 this.dirty = true;
-                this.showToast('Subflow created — it now appears in Add Node; Save to persist', 'info');
+                this.showToast('Component created — it now appears in Add Node; Save to persist', 'info');
                 return key;
             },
 
@@ -4674,7 +4674,7 @@ function initEditorApp() {
              */
             deleteTreeFolder(folder) {
                 if (!folder) return;
-                if (!confirm(`Delete folder "${folder.name}"? Modules inside move back to the root — nothing else is removed.`)) return;
+                if (!confirm(`Delete folder "${folder.name}"? Child flows inside move back to the root — nothing else is removed.`)) return;
                 const doomed = {};
                 const mark = id => {
                     doomed[id] = true;
@@ -4910,14 +4910,14 @@ function initEditorApp() {
                     const note = warnCount ? ' — ' + warnCount + ' external-ref warning(s), see console' : '';
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(json)
-                            .then(() => this.showToast('Module export copied to clipboard' + note, warnCount ? 'warning' : 'info'))
+                            .then(() => this.showToast('Child flow export copied to clipboard' + note, warnCount ? 'warning' : 'info'))
                             .catch(() => this.fallbackCopyJson(json));
                     } else {
                         this.fallbackCopyJson(json);
-                        if (warnCount) this.showToast('Module exported with ' + warnCount + ' warning(s)', 'warning');
+                        if (warnCount) this.showToast('Child flow exported with ' + warnCount + ' warning(s)', 'warning');
                     }
                 } catch (err) {
-                    this.showToast('Module export failed: ' + err.message, 'danger');
+                    this.showToast('Child flow export failed: ' + err.message, 'danger');
                 }
             },
 
@@ -4937,13 +4937,13 @@ function initEditorApp() {
                     const json = JSON.stringify(data.module_export, null, 2);
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(json)
-                            .then(() => this.showToast('Subflow definition export copied to clipboard', 'info'))
+                            .then(() => this.showToast('Component export copied to clipboard', 'info'))
                             .catch(() => this.fallbackCopyJson(json));
                     } else {
                         this.fallbackCopyJson(json);
                     }
                 } catch (err) {
-                    this.showToast('Subflow export failed: ' + err.message, 'danger');
+                    this.showToast('Component export failed: ' + err.message, 'danger');
                 }
             },
 
@@ -4993,7 +4993,7 @@ function initEditorApp() {
                     }
                     const warnings = data.warnings || [];
                     warnings.forEach(w => console.warn('module import:', w));
-                    this.showToast('Module imported' +
+                    this.showToast('Child flow imported' +
                         (warnings.length ? ' — ' + warnings.length + ' warning(s), see console' : ''),
                         warnings.length ? 'warning' : 'success');
                 } catch (err) {
@@ -5010,10 +5010,11 @@ function initEditorApp() {
              */
             renameModuleByName(moduleKey) {
                 const current = this.moduleLabelFor(moduleKey);
-                const name = (window.prompt('Rename module', current) || '').trim();
+                const kind = this.moduleRoleFor(moduleKey) === 'subflow' ? 'component' : 'child flow';
+                const name = (window.prompt('Rename ' + kind, current) || '').trim();
                 if (!name || name === moduleKey) return null;
                 if (this.editor.drawflow.drawflow[name]) {
-                    this.showToast(`A module named "${name}" already exists`, 'error');
+                    this.showToast(`A ${kind} named "${name}" already exists`, 'error');
                     return null;
                 }
                 if (typeof this.editor.renameModule !== 'function' || !this.editor.renameModule(moduleKey, name)) {
@@ -5075,11 +5076,12 @@ function initEditorApp() {
                 const df = this.editor.drawflow.drawflow || {};
                 const names = Object.keys(df);
                 if (names.length <= 1) {
-                    this.showToast('Cannot delete the last module', 'info');
+                    this.showToast('Cannot delete the last child flow', 'info');
                     return;
                 }
                 const label = this.moduleLabelFor(moduleKey);
-                if (!confirm(`Delete module "${label}"? Its nodes and wires will be removed.`)) return;
+                const kind = this.moduleRoleFor(moduleKey) === 'subflow' ? 'component' : 'child flow';
+                if (!confirm(`Delete ${kind} "${label}"? Its nodes and wires will be removed.`)) return;
 
                 // If the doomed module is the visible one, activate a
                 // survivor first — removeModule on the current module
