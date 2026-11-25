@@ -143,8 +143,8 @@ func (a *Api) buildRoutes() *http.ServeMux {
 	// Node-RED + child flow import/export
 	mux.HandleFunc("POST /api/workflow-import-nodered", a.importNodeRED)
 	mux.HandleFunc("POST /api/workflow-export-nodered", a.exportNodeRED)
-	mux.HandleFunc("POST /api/flow-export", a.exportChildFlow)
-	mux.HandleFunc("POST /api/flow-import", a.importChildFlow)
+	mux.HandleFunc("POST /api/child-flow-export", a.exportChildFlow)
+	mux.HandleFunc("POST /api/child-flow-import", a.importChildFlow)
 
 	return mux
 }

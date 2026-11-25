@@ -123,13 +123,13 @@
         .flow-tab.disabled { color: #adb5bd; font-style: italic; }
         /* Child flow navigator tree (modules_as_first_class): the sidebar
            lists every child flow; tabs are only the open ones */
-        .module-tree { font-size: .85rem; }
-        .module-tree-root {
+        .flow-tree { font-size: .85rem; }
+        .flow-tree-root {
             font-weight: 600;
             padding: 2px 4px;
             color: var(--bs-secondary-color);
         }
-        .module-group-header {
+        .flow-group-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -140,8 +140,8 @@
             letter-spacing: .04em;
             color: #868e96;
         }
-        .module-group-header .btn { line-height: 1; }
-        .module-item {
+        .flow-group-header .btn { line-height: 1; }
+        .flow-item {
             display: flex;
             align-items: center;
             gap: 6px;
@@ -151,10 +151,10 @@
             color: var(--bs-body-color);
             user-select: none;
         }
-        .module-item:hover { background: rgba(13, 110, 253, .12); }
-        .module-item.active { background: rgba(13, 110, 253, .18); color: #0d6efd; font-weight: 600; }
-        .module-item.disabled { color: #adb5bd; font-style: italic; }
-        .module-item .module-open-dot {
+        .flow-item:hover { background: rgba(13, 110, 253, .12); }
+        .flow-item.active { background: rgba(13, 110, 253, .18); color: #0d6efd; font-weight: 600; }
+        .flow-item.disabled { color: #adb5bd; font-style: italic; }
+        .flow-item .flow-open-dot {
             width: 6px;
             height: 6px;
             border-radius: 50%;
@@ -162,7 +162,7 @@
             margin-left: auto;
             flex: none;
         }
-        .module-empty {
+        .flow-empty {
             padding: 2px 4px 2px 22px;
             color: #adb5bd;
             font-size: .78rem;
@@ -178,10 +178,10 @@
         }
         .tree-chevron.open { transform: rotate(90deg); }
         .tree-chevron-spacer { width: 12px; flex: none; }
-        .module-item.workflow-row { font-weight: 600; }
-        .module-item.workflow-row.selected { background: rgba(13, 110, 253, .18); }
-        .module-item.folder-row { color: var(--bs-secondary-color); }
-        .module-item.tree-drop-target {
+        .flow-item.workflow-row { font-weight: 600; }
+        .flow-item.workflow-row.selected { background: rgba(13, 110, 253, .18); }
+        .flow-item.folder-row { color: var(--bs-secondary-color); }
+        .flow-item.tree-drop-target {
             outline: 1px dashed #0d6efd;
             outline-offset: -1px;
             background: rgba(13, 110, 253, .18);
@@ -513,13 +513,13 @@
            canvas node cards. */
         :root { --na-accent: #e0452a; }
         body { font-family: "IBM Plex Sans", system-ui, sans-serif; }
-        .module-tree, .module-item, .flow-tab { font-family: "IBM Plex Mono", ui-monospace, monospace; }
-        .module-item { font-size: .78rem; }
-        .module-item:hover { background: rgba(224, 69, 42, .10); }
-        .module-item.active { background: rgba(224, 69, 42, .16); color: var(--na-accent); }
-        .module-item .module-open-dot { background: var(--na-accent); }
-        .module-item.workflow-row.selected { background: rgba(224, 69, 42, .16); }
-        .module-item.tree-drop-target {
+        .flow-tree, .flow-item, .flow-tab { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+        .flow-item { font-size: .78rem; }
+        .flow-item:hover { background: rgba(224, 69, 42, .10); }
+        .flow-item.active { background: rgba(224, 69, 42, .16); color: var(--na-accent); }
+        .flow-item .flow-open-dot { background: var(--na-accent); }
+        .flow-item.workflow-row.selected { background: rgba(224, 69, 42, .16); }
+        .flow-item.tree-drop-target {
             outline-color: var(--na-accent);
             background: rgba(224, 69, 42, .16);
         }
@@ -572,9 +572,9 @@
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="mb-0">Explorer</h5>
                 </div>
-                <div class="module-tree mb-4">
+                <div class="flow-tree mb-4">
                     <!-- Super-group: Workflows -->
-                    <div class="module-group-header px-0">
+                    <div class="flow-group-header px-0">
                         <span>
                             <i class="fas fa-chevron-right tree-chevron me-1"
                                :class="{ open: !collapsedTreeNodes['sg:workflows'] }"
@@ -598,17 +598,17 @@
                     </div>
                     <template v-if="!collapsedTreeNodes['sg:workflows']">
                     <div v-for="row in workflowTreeRows" :key="row.key"
-                         class="module-item"
+                         class="flow-item"
                          :class="{
                              'workflow-row': row.type === 'workflow',
                              'selected': row.type === 'workflow' && row.selected,
                              'folder-row': row.type === 'folder' || row.type === 'wgroup',
-                             'active': row.type === 'module' && activeTab === row.item.module,
-                             'disabled': row.type === 'module' && !row.item.enabled,
+                             'active': row.type === 'flow' && activeTab === row.item.childFlow,
+                             'disabled': row.type === 'flow' && !row.item.enabled,
                              'tree-drop-target': treeDropKey === row.key
                          }"
                          :style="{ paddingLeft: (4 + row.depth * 14) + 'px' }"
-                         :draggable="row.type === 'module' || row.type === 'workflow'"
+                         :draggable="row.type === 'flow' || row.type === 'workflow'"
                          :title="row.type === 'workflow'
                              ? 'Click to select, double-click for workflow properties, drag into a group'
                              : (row.type === 'wgroup'
@@ -631,8 +631,8 @@
                             'fa-diagram-project': row.type === 'workflow',
                             'fa-folder-open': (row.type === 'folder' || row.type === 'wgroup') && row.expanded,
                             'fa-folder': (row.type === 'folder' || row.type === 'wgroup') && !row.expanded,
-                            'fa-stream': row.type === 'module' && row.item.role !== 'subflow',
-                            'fa-object-group': row.type === 'module' && row.item.role === 'subflow'
+                            'fa-stream': row.type === 'flow' && row.item.role !== 'component',
+                            'fa-object-group': row.type === 'flow' && row.item.role === 'component'
                         }"></i>
                         <span class="text-truncate">{{ row.label }}</span>
                         <template v-if="row.type === 'workflow'">
@@ -640,38 +640,38 @@
                                title="Workflow properties" @click.stop="openWorkflowProps"></i>
                             <i v-else class="fas fa-plus text-secondary ms-auto" role="button"
                                title="Add a component to this workflow"
-                               @click.stop="addSubflowToWorkflow(row.workflow)"></i>
+                               @click.stop="addComponentToWorkflow(row.workflow)"></i>
                         </template>
-                        <template v-else-if="row.type === 'module'">
+                        <template v-else-if="row.type === 'flow'">
                             <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Child flow disabled"></i>
-                            <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
+                            <span v-else-if="row.item.open" class="flow-open-dot" title="Open in a tab"></span>
                         </template>
                     </div>
-                    <div v-if="!workflows.length && !workflowGroups.length" class="module-empty">No workflows — + to create</div>
+                    <div v-if="!workflows.length && !workflowGroups.length" class="flow-empty">No workflows — + to create</div>
                     </template>
 
                     <!-- Super-group: Components — the selected workflow's
-                         role:"subflow" definition canvases (they live
+                         role:"component" definition canvases (they live
                          inside the workflow document; there are no
                          global components). Kind beats folder
                          membership: a component in a folder still shows
                          here. -->
-                    <div class="module-group-header px-0 mt-2">
+                    <div class="flow-group-header px-0 mt-2">
                         <span>
                             <i class="fas fa-chevron-right tree-chevron me-1"
-                               :class="{ open: !collapsedTreeNodes['sg:subflows'] }"
-                               @click="toggleTreeNode('sg:subflows')"></i>Components
+                               :class="{ open: !collapsedTreeNodes['sg:components'] }"
+                               @click="toggleTreeNode('sg:components')"></i>Components
                         </span>
                         <button class="btn btn-sm btn-outline-primary py-0 px-1" :disabled="!selectedWorkflow"
-                                @click="createSubflow()" title="New component (child flow with port markers)">
+                                @click="createComponent()" title="New component (child flow with port markers)">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
-                    <template v-if="!collapsedTreeNodes['sg:subflows']">
-                    <div v-for="row in subflowTreeRows" :key="row.key"
-                         class="module-item"
+                    <template v-if="!collapsedTreeNodes['sg:components']">
+                    <div v-for="row in componentTreeRows" :key="row.key"
+                         class="flow-item"
                          :class="{
-                             'active': activeTab === row.item.module,
+                             'active': activeTab === row.item.childFlow,
                              'disabled': !row.item.enabled,
                              'tree-drop-target': treeDropKey === row.key
                          }"
@@ -689,9 +689,9 @@
                         <i class="fas fa-object-group text-secondary"></i>
                         <span class="text-truncate">{{ row.label }}</span>
                         <i v-if="!row.item.enabled" class="fas fa-ban ms-auto" title="Component disabled"></i>
-                        <span v-else-if="row.item.open" class="module-open-dot" title="Open in a tab"></span>
+                        <span v-else-if="row.item.open" class="flow-open-dot" title="Open in a tab"></span>
                     </div>
-                    <div v-if="!subflowTreeRows.length" class="module-empty">
+                    <div v-if="!componentTreeRows.length" class="flow-empty">
                         {{ selectedWorkflow ? 'No components — + to create' : 'Select a workflow to see its components' }}
                     </div>
                     </template>
@@ -711,12 +711,12 @@
                      toolbar shares the row so it never overlays tab labels -->
                 <div class="editor-header d-flex align-items-end">
                 <div class="flow-tabs d-flex align-items-end">
-                    <button v-for="tab in flowTabs" :key="tab.module"
-                            class="flow-tab" :class="{ active: activeTab === tab.module, disabled: tab.disabled }"
+                    <button v-for="tab in flowTabs" :key="tab.childFlow"
+                            class="flow-tab" :class="{ active: activeTab === tab.childFlow, disabled: tab.disabled }"
                             title="Click to switch, double-click to rename, right-click to disable/enable. Closing a tab keeps the child flow in the tree."
                             @click="switchTab(tab)" @dblclick="renameFlowTab(tab)"
                             @contextmenu.prevent="toggleFlowTabDisabled(tab)">
-                        <i v-if="tab.role === 'subflow'" class="fas fa-object-group me-1" title="Component"></i>{{ tab.label }}
+                        <i v-if="tab.role === 'component'" class="fas fa-object-group me-1" title="Component"></i>{{ tab.label }}
                         <i v-if="tab.disabled" class="fas fa-ban ms-1" title="Flow disabled"></i>
                         <span class="flow-tab-close"
                               title="Close flow" @click.stop="closeFlowTab(tab)">&times;</span>
@@ -788,7 +788,7 @@
                             </a></li>
                             <li><a class="dropdown-item" href="#" :class="{ disabled: !selectedWorkflow }"
                                     :disabled="!selectedWorkflow"
-                                    @click.prevent="selectedWorkflow && openModuleImport()">
+                                    @click.prevent="selectedWorkflow && openFlowImport()">
                                 <i class="fas fa-file-import me-2"></i>Import child flow…
                             </a></li>
                         </ul>
@@ -799,7 +799,7 @@
                     </button>
                 </div>
                 </div>
-                <div v-if="activeModuleRole === 'subflow'"
+                <div v-if="activeFlowRole === 'component'"
                      class="alert alert-secondary py-1 px-2 mb-0 small text-muted">
                     <i class="fas fa-object-group me-1"></i>
                     Editing component — add <em>Component input</em>/<em>Component output</em>
@@ -897,42 +897,42 @@
                     </button>
                 </div>
 
-                <!-- Child flow tree context menu (module navigator) -->
-                <div v-if="moduleContextMenu.show" class="flow-context-menu shadow"
-                     :style="{ left: moduleContextMenu.x + 'px', top: moduleContextMenu.y + 'px' }">
+                <!-- Child flow tree context menu (child flow navigator) -->
+                <div v-if="flowContextMenu.show" class="flow-context-menu shadow"
+                     :style="{ left: flowContextMenu.x + 'px', top: flowContextMenu.y + 'px' }">
                     <button class="dropdown-item"
-                            @click="openModuleItem({ module: moduleContextMenu.module, label: moduleLabelFor(moduleContextMenu.module), role: moduleRoleFor(moduleContextMenu.module) }); closeModuleContextMenu()">
+                            @click="openFlowItem({ childFlow: flowContextMenu.childFlow, label: flowLabelFor(flowContextMenu.childFlow), role: flowRoleFor(flowContextMenu.childFlow) }); closeFlowContextMenu()">
                         <i class="fas fa-folder-open me-2"></i>Open
                     </button>
                     <button class="dropdown-item"
-                            @click="renameModuleByName(moduleContextMenu.module); closeModuleContextMenu()">
+                            @click="renameFlowByName(flowContextMenu.childFlow); closeFlowContextMenu()">
                         <i class="fas fa-pen me-2"></i>Rename
                     </button>
                     <button class="dropdown-item"
-                            @click="exportModule(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas fa-file-export me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Export component…' : 'Export child flow…' }}
+                            @click="exportFlow(flowContextMenu.childFlow); closeFlowContextMenu()">
+                        <i class="fas fa-file-export me-2"></i>{{ flowRoleFor(flowContextMenu.childFlow) === 'component' ? 'Export component…' : 'Export child flow…' }}
                     </button>
-                    <button v-if="moduleRoleFor(moduleContextMenu.module) === 'subflow'" class="dropdown-item"
-                            @click="openModuleEnv(moduleContextMenu.module); closeModuleContextMenu()">
+                    <button v-if="flowRoleFor(flowContextMenu.childFlow) === 'component'" class="dropdown-item"
+                            @click="openComponentEnv(flowContextMenu.childFlow); closeFlowContextMenu()">
                         <i class="fas fa-list me-2"></i>Component env…
                     </button>
                     <button class="dropdown-item"
-                            @click="toggleModuleDisabled(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas me-2" :class="moduleTree.flows.concat(moduleTree.subflows).some(m => m.module === moduleContextMenu.module && m.enabled) ? 'fa-toggle-off' : 'fa-toggle-on'"></i>
-                        {{ moduleTree.flows.concat(moduleTree.subflows).some(m => m.module === moduleContextMenu.module && m.enabled) ? 'Disable' : 'Enable' }}
+                            @click="toggleFlowDisabled(flowContextMenu.childFlow); closeFlowContextMenu()">
+                        <i class="fas me-2" :class="flowTree.flows.concat(flowTree.components).some(m => m.childFlow === flowContextMenu.childFlow && m.enabled) ? 'fa-toggle-off' : 'fa-toggle-on'"></i>
+                        {{ flowTree.flows.concat(flowTree.components).some(m => m.childFlow === flowContextMenu.childFlow && m.enabled) ? 'Disable' : 'Enable' }}
                     </button>
                     <hr v-if="treeGroups.length" class="dropdown-divider my-1">
                     <button v-if="treeGroups.length" class="dropdown-item"
-                            @click="moveModuleToFolder(moduleContextMenu.module, null); closeModuleContextMenu()">
+                            @click="moveFlowToFolder(flowContextMenu.childFlow, null); closeFlowContextMenu()">
                         <i class="fas fa-level-up-alt me-2"></i>Move to root
                     </button>
                     <button v-for="g in treeGroups" :key="'move-' + g.id" class="dropdown-item"
-                            @click="moveModuleToFolder(moduleContextMenu.module, g.id); closeModuleContextMenu()">
+                            @click="moveFlowToFolder(flowContextMenu.childFlow, g.id); closeFlowContextMenu()">
                         <i class="fas fa-folder me-2"></i>{{ folderPathFor(g) }}
                     </button>
                     <button class="dropdown-item text-danger"
-                            @click="deleteModuleByName(moduleContextMenu.module); closeModuleContextMenu()">
-                        <i class="fas fa-trash me-2"></i>{{ moduleRoleFor(moduleContextMenu.module) === 'subflow' ? 'Delete component' : 'Delete child flow' }}
+                            @click="deleteFlowByName(flowContextMenu.childFlow); closeFlowContextMenu()">
+                        <i class="fas fa-trash me-2"></i>{{ flowRoleFor(flowContextMenu.childFlow) === 'component' ? 'Delete component' : 'Delete child flow' }}
                     </button>
                 </div>
 
@@ -942,11 +942,11 @@
                 <div v-if="folderContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: folderContextMenu.x + 'px', top: folderContextMenu.y + 'px' }">
                     <button class="dropdown-item"
-                            @click="createModuleInFolder('flow', folderContextMenu.folderId); closeFolderContextMenu()">
+                            @click="createFlowInFolder('flow', folderContextMenu.folderId); closeFolderContextMenu()">
                         <i class="fas fa-plus me-2"></i>New child flow here
                     </button>
                     <button class="dropdown-item"
-                            @click="createModuleInFolder('subflow', folderContextMenu.folderId); closeFolderContextMenu()">
+                            @click="createFlowInFolder('component', folderContextMenu.folderId); closeFolderContextMenu()">
                         <i class="fas fa-object-group me-2"></i>New component here
                     </button>
                     <button class="dropdown-item"
@@ -964,7 +964,7 @@
                 </div>
 
                 <!-- Workflow row context menu (workflow_groups):
-                     properties + module-folder creation (selects the
+                     properties + flow-folder creation (selects the
                      workflow first) + group membership moves. -->
                 <div v-if="workflowContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: workflowContextMenu.x + 'px', top: workflowContextMenu.y + 'px' }">
@@ -1125,11 +1125,11 @@
         </div>
     </div>
 
-    <!-- Import child flow modal (module_export_import): merges a module
+    <!-- Import child flow modal (childflow_export_import): merges a child flow
          envelope into the CURRENT workflow as a new child flow — unlike
          the toolbar Import, which replaces the canvas or creates a
          new workflow. -->
-    <div class="modal fade" id="moduleImportModal" tabindex="-1" ref="moduleImportModal">
+    <div class="modal fade" id="flowImportModal" tabindex="-1" ref="flowImportModal">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1139,17 +1139,17 @@
                 <div class="modal-body">
                     <label class="form-label">Child flow export JSON</label>
                     <textarea class="form-control font-monospace" rows="10"
-                              v-model="moduleImportJson"
-                              :class="{ 'is-invalid': moduleImportError }"
-                              placeholder='Paste a module export ({ "nodestore": "module", ... })...'></textarea>
-                    <div class="invalid-feedback">{{ moduleImportError }}</div>
+                              v-model="flowImportJson"
+                              :class="{ 'is-invalid': flowImportError }"
+                              placeholder='Paste a child flow export ({ "nodestore\": \"child_flow", ... })...'></textarea>
+                    <div class="invalid-feedback">{{ flowImportError }}</div>
                     <small class="form-text text-muted">Adds a new child flow to the selected workflow.
                         Node and child-flow ids are re-minted; references to nodes outside the
                         exported child flow stay as-is and are reported if they cannot resolve.</small>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" @click="confirmModuleImport">Import</button>
+                    <button type="button" class="btn btn-primary" @click="confirmFlowImport">Import</button>
                 </div>
             </div>
         </div>

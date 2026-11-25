@@ -790,16 +790,16 @@ func TestChildFlowExportImportErrors(t *testing.T) {
 	seedWorkflow(t, store, "wf-1", "wf-1")
 
 	// Workflow exists but holds no child flow named "m".
-	env, _ := postAPI(t, a, "/api/flow-export", map[string]interface{}{
+	env, _ := postAPI(t, a, "/api/child-flow-export", map[string]interface{}{
 		"id": "wf-1", "flow": "m",
 	})
 	apiError(t, env, "child flow export")
 
-	env, _ = postAPI(t, a, "/api/flow-export", map[string]interface{}{
+	env, _ = postAPI(t, a, "/api/child-flow-export", map[string]interface{}{
 		"id": "missing", "flow": "m",
 	})
 	apiError(t, env, "child flow export missing workflow")
 
-	env, _ = postAPI(t, a, "/api/flow-import", map[string]interface{}{"id": "wf-1"})
+	env, _ = postAPI(t, a, "/api/child-flow-import", map[string]interface{}{"id": "wf-1"})
 	apiError(t, env, "child flow import without payload")
 }

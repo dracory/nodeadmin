@@ -80,7 +80,7 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	require.NoError(t, chromedp.Run(page,
 		chromedp.Navigate(srv.browserURL("/?controller=editor"))))
 	waitVueApp(t, page)
-	waitElementText(t, page, ".module-item", "E2E Flow")
+	waitElementText(t, page, ".flow-item", "E2E Flow")
 
 	if errs := w.errors(); len(errs) > 0 {
 		t.Fatalf("console errors on editor: %v", errs)
@@ -155,7 +155,7 @@ func TestEditorWorkflowDeepLink(t *testing.T) {
 	waitElement(t, page, ".editor-welcome")
 
 	// Selecting the workflow in the explorer writes the URL param.
-	clickText(t, page, ".module-item.workflow-row", "E2E Deep Link")
+	clickText(t, page, ".flow-item.workflow-row", "E2E Deep Link")
 	waitElement(t, page, ".flow-tabs .flow-tab:not(.flow-tab-add)")
 	require.True(t, evalBool(t, page,
 		`new URLSearchParams(location.search).get('workflow') === `+js(id)),

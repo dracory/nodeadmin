@@ -74,5 +74,5 @@ func TestDeployRestartResume(t *testing.T) {
 	// The workspace stays hidden until a workflow is opened — the
 	// welcome screen is the "editor mounted" signal.
 	waitElement(t, page, ".editor-welcome")
-	waitElementText(t, page, ".module-item", "E2E Deploy")
+	waitElementText(t, page, ".flow-item", "E2E Deploy")
 }
