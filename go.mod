@@ -9,7 +9,7 @@ require (
 	github.com/dracory/entitystore v1.24.0
 	github.com/dracory/hb v1.88.0
 	github.com/dracory/neat v0.61.0
-	github.com/dracory/nodebase v0.4.0
+	github.com/dracory/nodebase v0.5.0
 	github.com/dracory/noderun v0.2.0
 	github.com/dracory/nodestore v0.2.0
 	github.com/gouniverse/api v1.6.0
@@ -19,6 +19,7 @@ require (
 )
 
 require (
+	github.com/cbroglie/mustache v1.4.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dlclark/regexp2/v2 v2.11.0 // indirect
