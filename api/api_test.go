@@ -750,7 +750,7 @@ func TestWorkflowGroups(t *testing.T) {
 	apiError(t, env, "non-array groups")
 }
 
-/* ---- Node-RED + module import/export ---- */
+/* ---- Node-RED + child flow import/export ---- */
 
 func TestNodeREDImportExport(t *testing.T) {
 	a := New(newTestStore(t), nil)
@@ -784,22 +784,22 @@ func TestNodeREDImportExport(t *testing.T) {
 	apiError(t, env, "export missing workflow")
 }
 
-func TestModuleExportImportErrors(t *testing.T) {
+func TestChildFlowExportImportErrors(t *testing.T) {
 	store := newTestStore(t)
 	a := New(store, nil)
 	seedWorkflow(t, store, "wf-1", "wf-1")
 
-	// Workflow exists but holds no module named "m".
-	env, _ := postAPI(t, a, "/api/module-export", map[string]interface{}{
-		"id": "wf-1", "module": "m",
+	// Workflow exists but holds no child flow named "m".
+	env, _ := postAPI(t, a, "/api/flow-export", map[string]interface{}{
+		"id": "wf-1", "flow": "m",
 	})
-	apiError(t, env, "module export")
+	apiError(t, env, "child flow export")
 
-	env, _ = postAPI(t, a, "/api/module-export", map[string]interface{}{
-		"id": "missing", "module": "m",
+	env, _ = postAPI(t, a, "/api/flow-export", map[string]interface{}{
+		"id": "missing", "flow": "m",
 	})
-	apiError(t, env, "module export missing workflow")
+	apiError(t, env, "child flow export missing workflow")
 
-	env, _ = postAPI(t, a, "/api/module-import", map[string]interface{}{"id": "wf-1"})
-	apiError(t, env, "module import without payload")
+	env, _ = postAPI(t, a, "/api/flow-import", map[string]interface{}{"id": "wf-1"})
+	apiError(t, env, "child flow import without payload")
 }

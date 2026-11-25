@@ -140,11 +140,11 @@ func (a *Api) buildRoutes() *http.ServeMux {
 	mux.HandleFunc("POST /api/queue-item-delete", a.queueItemDelete)
 	mux.HandleFunc("POST /api/queue-item-requeue", a.queueItemRequeue)
 
-	// Node-RED + module import/export
+	// Node-RED + child flow import/export
 	mux.HandleFunc("POST /api/workflow-import-nodered", a.importNodeRED)
 	mux.HandleFunc("POST /api/workflow-export-nodered", a.exportNodeRED)
-	mux.HandleFunc("POST /api/module-export", a.exportModule)
-	mux.HandleFunc("POST /api/module-import", a.importModule)
+	mux.HandleFunc("POST /api/flow-export", a.exportChildFlow)
+	mux.HandleFunc("POST /api/flow-import", a.importChildFlow)
 
 	return mux
 }
