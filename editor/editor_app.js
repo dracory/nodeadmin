@@ -3059,7 +3059,7 @@ function initEditorApp() {
              * Pick a form field type for a JSON schema property
              */
             schemaFieldType(prop) {
-                if (prop && Array.isArray(prop.enum)) return 'select';
+                if (prop && (Array.isArray(prop.enum) || Array.isArray(prop.options))) return 'select';
                 switch (prop && prop.type) {
                     case 'boolean': return 'checkbox';
                     case 'number':
@@ -3113,7 +3113,27 @@ function initEditorApp() {
                 Object.keys(props).forEach(key => {
                     const prop = props[key] || {};
                     let field = this.schemaFieldType(prop);
-                    let options = Array.isArray(prop.enum) ? prop.enum : null;
+                    // Enum options normalize to {value, label,
+                    // description} — rich selects render the label
+                    // with its explanation beneath (Bootstrap dropdown).
+                    // Sources: prop.options ([{value,title,description}|string])
+                    // or prop.enum + prop.enumDescriptions {value: text}.
+                    const rawOpts = Array.isArray(prop.options) ? prop.options
+                        : (Array.isArray(prop.enum) ? prop.enum : null);
+                    let options = rawOpts && rawOpts.map(o => {
+                        if (o && typeof o === 'object') {
+                            return {
+                                value: o.value !== undefined ? o.value : o.title,
+                                label: o.title || o.label || String(o.value),
+                                description: o.description || ''
+                            };
+                        }
+                        return {
+                            value: o,
+                            label: String(o),
+                            description: (prop.enumDescriptions && prop.enumDescriptions[o]) || ''
+                        };
+                    });
                     let value = nodeData && nodeData[key] !== undefined ? nodeData[key]
                         : (prop.default !== undefined ? prop.default
                             : (field === 'checkbox' ? false : (field === 'json' ? {} : '')));
@@ -3142,6 +3162,9 @@ function initEditorApp() {
                         description: prop.description || '',
                         field,
                         options,
+                        // rich selects show each option's description
+                        // under its label (Bootstrap dropdown)
+                        rich: field === 'select' && !!options && options.some(o => o.description),
                         required: required.indexOf(key) !== -1,
                         // Conditional visibility (showIf / visible-when):
                         // {otherKey: expectedValue, ...} — the field is
@@ -3160,6 +3183,16 @@ function initEditorApp() {
              * the current form value (compared as strings so booleans
              * and numbers work too).
              */
+            /**
+             * Label shown on a rich-select dropdown button — the
+             * selected option's label (or its raw value).
+             */
+            selectDisplayLabel(field) {
+                const v = this.editingNodeForm[field.key];
+                const opt = (field.options || []).find(o => String(o.value) === String(v));
+                return opt ? opt.label : (v === '' || v === undefined ? '— select —' : String(v));
+            },
+
             schemaFieldVisible(field) {
                 if (!field || !field.showIf) return true;
                 return Object.keys(field.showIf).every(k =>

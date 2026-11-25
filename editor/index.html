@@ -1154,10 +1154,30 @@
                                 <option value="">— select —</option>
                                 <option v-for="opt in field.options" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
                             </select>
+                            <!-- Rich select: options carry descriptions —
+                                 a Bootstrap dropdown shows label + explanation
+                                 (plain selects can't render rich items) -->
+                            <div v-else-if="field.field === 'select' && field.rich" class="dropdown">
+                                <button type="button" class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                                        data-bs-toggle="dropdown" aria-expanded="false"
+                                        :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                                    {{ selectDisplayLabel(field) }}
+                                </button>
+                                <ul class="dropdown-menu w-100">
+                                    <li v-for="opt in field.options" :key="opt.value">
+                                        <a class="dropdown-item" href="#"
+                                           :class="{ active: String(editingNodeForm[field.key]) === String(opt.value) }"
+                                           @click.prevent="editingNodeForm[field.key] = opt.value">
+                                            <div class="fw-semibold">{{ opt.label }}</div>
+                                            <div v-if="opt.description" class="small text-muted text-wrap">{{ opt.description }}</div>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
                             <select v-else-if="field.field === 'select'" class="form-select"
                                     v-model="editingNodeForm[field.key]"
                                     :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
-                                <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
+                                <option v-for="opt in field.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
                             <div v-else-if="field.field === 'checkbox'" class="form-check">
                                 <input type="checkbox" class="form-check-input" :id="'prop-' + field.key"
