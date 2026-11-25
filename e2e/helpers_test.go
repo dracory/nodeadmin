@@ -254,6 +254,8 @@ func newLocalBrowser(t *testing.T, bin string) *browser {
 		chromedp.DefaultExecAllocatorOptions[1:]...),
 		chromedp.ExecPath(bin),
 		chromedp.Flag("headless", "new"),
+		// Desktop-width viewport so Bootstrap lg breakpoints render.
+		chromedp.Flag("window-size", "1400,900"),
 	)
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
@@ -297,6 +299,10 @@ func newWindowsBrowser(t *testing.T, bin string) *browser {
 			"--disable-gpu",
 			"--no-first-run",
 			"--no-default-browser-check",
+			// Desktop-width viewport: Bootstrap's `navbar-collapse` is
+			// display:none below the lg breakpoint, and the suite waits
+			// for the navbar to be visible.
+			"--window-size=1400,900",
 			"--remote-debugging-port="+strconv.Itoa(port),
 			"--user-data-dir="+profile,
 			"about:blank",

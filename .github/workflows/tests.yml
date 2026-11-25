@@ -26,3 +26,15 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+    # Browser e2e (chromedp, //go:build e2e) — needs a real Chrome.
+    - name: Set up Chrome
+      id: chrome
+      uses: browser-actions/setup-chrome@v1
+      with:
+        chrome-version: stable
+
+    - name: E2E tests
+      env:
+        NODEADMIN_E2E_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      run: go test -tags e2e -timeout 300s ./e2e/
