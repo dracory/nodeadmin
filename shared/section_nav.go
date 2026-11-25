@@ -8,35 +8,31 @@ import (
 	"github.com/dracory/nodestore"
 )
 
-// SectionNav renders the node admin section navigation as pills,
-// matching the nav-pills pattern used across the external admin
-// packages (shopadmin, taskadmin). The active tab is derived from the
-// ?controller= query parameter. Workflows and Messages tabs show
-// record counts as badges when the store is available.
+// SectionNav renders the node admin section navigation as the mono
+// "NODES ›" pill strip. The active tab is derived from the
+// ?controller= query parameter. Workflows, Nodes and Messages tabs
+// show record counts as badges when the store is available.
 func SectionNav(r *http.Request, store nodestore.StoreInterface) hb.TagInterface {
 	active := activeController(r)
 
-	tabs := make([]hb.TagInterface, 0, 5)
-	for _, item := range navItems(r, store) {
+	items := navItems(r, store)
+	tabs := make([]hb.TagInterface, 0, len(items))
+	for _, item := range items {
 		tabs = append(tabs, hb.LI().Class("nav-item").Child(navLink(item, active)))
 	}
 
 	ulNav := hb.UL().
-		Class("nav nav-pills p-1 justify-content-center flex-grow-1").
+		Class("nav").
 		Children(tabs)
 
 	label := hb.Span().
-		Class("fw-bolder text-uppercase ms-3 me-3").
-		Text("Nodes").
-		Child(hb.I().Class("bi bi-chevron-right ms-2"))
+		Class("qn-label").
+		HTML(`NODES&nbsp;<i class="bi bi-chevron-right"></i>`)
 
-	return hb.Div().
-		Class("card card-default mt-3 mb-4 bg-primary-subtle").
-		Child(hb.Div().
-			Class("card-body d-flex align-items-center").
-			Style("padding: 2px;").
-			Child(label).
-			Child(ulNav))
+	return hb.Nav().
+		Class("na-quicknav d-flex align-items-center px-2 py-1 mb-4").
+		Child(label).
+		Child(ulNav)
 }
 
 // NodeAdminURL returns the nodeadmin base URL injected into the

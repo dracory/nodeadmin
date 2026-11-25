@@ -27,13 +27,14 @@ import (
 	"github.com/dracory/nodeadmin/editor"
 	"github.com/dracory/nodeadmin/home"
 	"github.com/dracory/nodeadmin/messages"
+	"github.com/dracory/nodeadmin/nodes"
 	"github.com/dracory/nodeadmin/settings"
 	"github.com/dracory/nodeadmin/shared"
 	"github.com/dracory/nodeadmin/workflows"
-	"github.com/dracory/nodestore"
-	"github.com/dracory/noderun"
 	"github.com/dracory/nodebase"
 	"github.com/dracory/nodebase/dashboard"
+	"github.com/dracory/noderun"
+	"github.com/dracory/nodestore"
 )
 
 // Options contains all dependencies and configuration for the node admin.
@@ -416,6 +417,7 @@ func (a *admin) buildRoutes() map[string]func(w http.ResponseWriter, r *http.Req
 	return map[string]func(w http.ResponseWriter, r *http.Request){
 		shared.CONTROLLER_HOME:      func(w http.ResponseWriter, r *http.Request) { home.UI(uiConfig).Home(w, r) },
 		shared.CONTROLLER_WORKFLOWS: func(w http.ResponseWriter, r *http.Request) { workflows.UI(uiConfig).Workflows(w, r) },
+		shared.CONTROLLER_NODES:     func(w http.ResponseWriter, r *http.Request) { nodes.UI(uiConfig).Nodes(w, r) },
 		shared.CONTROLLER_MESSAGES:  func(w http.ResponseWriter, r *http.Request) { messages.UI(uiConfig).Messages(w, r) },
 		shared.CONTROLLER_EDITOR:    editor.New(a.opts.Store, !a.opts.DisableChrome).Editor,
 		shared.CONTROLLER_SETTINGS:  func(w http.ResponseWriter, r *http.Request) { a.settings.UI(uiConfig).SettingsManager(w, r) },

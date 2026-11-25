@@ -76,8 +76,8 @@ func TestEditorPageChrome(t *testing.T) {
 	if !strings.Contains(page, `src="?controller=editor&action=appjs"`) {
 		t.Fatal("editor_app.js script URL not rewritten")
 	}
-	if !strings.Contains(page, "nav nav-pills") {
-		t.Fatal("section nav pills missing")
+	if !strings.Contains(page, "na-quicknav") {
+		t.Fatal("section quick nav missing")
 	}
 }
 
@@ -97,8 +97,8 @@ func TestEditorChromeDisabled(t *testing.T) {
 	if strings.Contains(page, "<nav ") {
 		t.Fatal("chrome=false must not inject nodeadmin <nav>")
 	}
-	if strings.Contains(page, "nav nav-pills") {
-		t.Fatal("chrome=false must not inject section nav pills")
+	if strings.Contains(page, "na-quicknav") {
+		t.Fatal("chrome=false must not inject the section quick nav")
 	}
 	if strings.Contains(page, "app-navigation") {
 		t.Fatal("retired app-navigation component left in page")
@@ -125,7 +125,7 @@ func TestEditorBadgesWithStore(t *testing.T) {
 	New(store, true).Editor(rec, req)
 
 	page := rec.Body.String()
-	if !strings.Contains(page, "badge bg-secondary") {
+	if !strings.Contains(page, "badge text-bg-secondary") {
 		t.Fatal("store-backed count badges missing from editor chrome")
 	}
 }

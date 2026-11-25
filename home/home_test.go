@@ -80,9 +80,9 @@ func TestHome(t *testing.T) {
 
 	page := rec.Body.String()
 	for _, needle := range []string{
-		"nav nav-pills",    // section nav injected
+		"na-quicknav",      // section nav injected
 		"flow-a", "flow-b", // workflow rows
-		"Deployed", "Draft", // status badges
+		"deployed", "draft", // status pills
 		`controller=editor`, // edit links
 	} {
 		if !strings.Contains(page, needle) {

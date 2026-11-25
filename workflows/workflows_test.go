@@ -76,9 +76,9 @@ func TestWorkflows(t *testing.T) {
 
 	page := rec.Body.String()
 	for _, needle := range []string{
-		"nav nav-pills",
-		"wf-1", "flow-a", "Deployed",
-		"wf-2", "flow-b", "Draft",
+		"na-quicknav",
+		"wf-1", "flow-a", "deployed",
+		"wf-2", "flow-b", "draft",
 		`controller=editor`,
 	} {
 		if !strings.Contains(page, needle) {

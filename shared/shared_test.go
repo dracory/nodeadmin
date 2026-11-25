@@ -53,14 +53,14 @@ func TestNavbarEmitsNavElement(t *testing.T) {
 	if !strings.Contains(html, "<nav ") {
 		t.Fatalf("missing <nav> element: %s", html)
 	}
-	if !strings.Contains(html, "navbar-brand") {
+	if !strings.Contains(html, "na-brand") {
 		t.Fatalf("missing brand link: %s", html)
 	}
 }
 
-// TestNavbarActiveState proves the active link follows the
+// TestSectionNavActiveState proves the active link follows the
 // ?controller= query parameter, defaulting to home.
-func TestNavbarActiveState(t *testing.T) {
+func TestSectionNavActiveState(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		target     string
@@ -68,12 +68,13 @@ func TestNavbarActiveState(t *testing.T) {
 	}{
 		{"default is home", "/nodes", "?controller=home"},
 		{"workflows", "/nodes?controller=workflows", "?controller=workflows"},
+		{"nodes", "/nodes?controller=nodes", "?controller=nodes"},
 		{"editor", "/nodes?controller=editor", "?controller=editor"},
 		{"settings", "/nodes?controller=settings", "?controller=settings"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", tc.target, nil)
-			html := Navbar(r, nil).ToHTML()
+			html := SectionNav(r, nil).ToHTML()
 			// The active class is applied to the link pointing at the
 			// active controller URL (hb emits class before href).
 			needle := `class="nav-link active" href="` + "/nodes" + tc.wantActive + `"`
@@ -87,9 +88,10 @@ func TestNavbarActiveState(t *testing.T) {
 	}
 }
 
-// TestNavbarCountBadges proves Workflows and Messages links carry the
-// store counts as badges, and that a nil store renders badge-free.
-func TestNavbarCountBadges(t *testing.T) {
+// TestSectionNavCountBadges proves Workflows, Nodes and Messages
+// links carry the store counts as badges, and that a nil store
+// renders badge-free.
+func TestSectionNavCountBadges(t *testing.T) {
 	store := newTestStore(t)
 	if err := store.WorkflowCreate(context.Background(), nodestore.NewWorkflow("a")); err != nil {
 		t.Fatal(err)
@@ -102,16 +104,16 @@ func TestNavbarCountBadges(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("GET", "/nodes", nil)
-	html := Navbar(r, store).ToHTML()
-	if !strings.Contains(html, `badge bg-secondary ms-2">2`) {
+	html := SectionNav(r, store).ToHTML()
+	if !strings.Contains(html, `badge text-bg-secondary ms-2">2`) {
 		t.Fatalf("workflow badge missing: %s", html)
 	}
-	if !strings.Contains(html, `badge bg-secondary ms-2">1`) {
+	if !strings.Contains(html, `badge text-bg-secondary ms-2">1`) {
 		t.Fatalf("message badge missing: %s", html)
 	}
 
-	badgeFree := Navbar(r, nil).ToHTML()
-	if strings.Contains(badgeFree, "badge bg-secondary") {
+	badgeFree := SectionNav(r, nil).ToHTML()
+	if strings.Contains(badgeFree, "badge text-bg-secondary") {
 		t.Fatalf("nil store must render badge-free: %s", badgeFree)
 	}
 }
@@ -137,25 +139,26 @@ func TestNavbarBootleganceAttributes(t *testing.T) {
 	}
 }
 
-// TestSectionNav proves the pill nav shares the nav-items model:
-// active state from ?controller=, badges, and the section label.
+// TestSectionNav proves the quick-nav strip shares the nav-items
+// model: active state from ?controller=, badges, and the section
+// label.
 func TestSectionNav(t *testing.T) {
 	r := httptest.NewRequest("GET", "/nodes?controller=messages", nil)
 	html := SectionNav(r, nil).ToHTML()
-	if !strings.Contains(html, "nav nav-pills") {
-		t.Fatalf("missing pills container: %s", html)
+	if !strings.Contains(html, "na-quicknav") {
+		t.Fatalf("missing quick-nav container: %s", html)
 	}
 	if !strings.Contains(html, `class="nav-link active" href="/nodes?controller=messages"`) {
 		t.Fatalf("active tab not on messages: %s", html)
 	}
-	if !strings.Contains(html, "Nodes") {
+	if !strings.Contains(html, "NODES") {
 		t.Fatalf("missing section label: %s", html)
 	}
 
 	store := newTestStore(t)
 	_ = store.WorkflowCreate(context.Background(), nodestore.NewWorkflow("a"))
 	html = SectionNav(r, store).ToHTML()
-	if !strings.Contains(html, `badge bg-secondary ms-2">1`) {
+	if !strings.Contains(html, `badge text-bg-secondary ms-2">1`) {
 		t.Fatalf("badge missing: %s", html)
 	}
 }

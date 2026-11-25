@@ -76,7 +76,7 @@ func TestMessages(t *testing.T) {
 	section.Messages(rec, req)
 
 	page := rec.Body.String()
-	for _, needle := range []string{"nav nav-pills", "msg-1", "Yes"} {
+	for _, needle := range []string{"na-quicknav", "msg-1", "error"} {
 		if !strings.Contains(page, needle) {
 			t.Fatalf("page missing %q\n%s", needle, page)
 		}

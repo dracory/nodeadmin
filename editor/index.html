@@ -8,6 +8,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons (the shared admin chrome uses bi-* glyphs) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- IBM Plex fonts (admin skin) -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- Bootlegance theme/mode switcher: themes + themes.json are fetched
          from the same CDN base derived from this script URL. Default is
          stock Bootstrap (opt-in switching only); selection persists via a
@@ -502,6 +506,36 @@
             font-size: 0.85rem;
         }
         .code-editor-fallback { font-family: var(--bs-font-monospace); font-size: 0.85rem; }
+
+        /* v2 skin accents (cosmetic only — no behavioral hooks):
+           IBM Plex Mono on the explorer tree/tab strip, signal-red
+           accent on the active states, accent left border on the
+           canvas node cards. */
+        :root { --na-accent: #e0452a; }
+        body { font-family: "IBM Plex Sans", system-ui, sans-serif; }
+        .module-tree, .module-item, .flow-tab { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+        .module-item { font-size: .78rem; }
+        .module-item:hover { background: rgba(224, 69, 42, .10); }
+        .module-item.active { background: rgba(224, 69, 42, .16); color: var(--na-accent); }
+        .module-item .module-open-dot { background: var(--na-accent); }
+        .module-item.workflow-row.selected { background: rgba(224, 69, 42, .16); }
+        .module-item.tree-drop-target {
+            outline-color: var(--na-accent);
+            background: rgba(224, 69, 42, .16);
+        }
+        .flow-tab.active { color: var(--na-accent); }
+        .flow-tab-add { color: var(--na-accent); }
+        .flow-selected { outline-color: var(--na-accent) !important; }
+        #drawflow .drawflow-node {
+            border-left: 3px solid var(--na-accent);
+            font-family: "IBM Plex Mono", ui-monospace, monospace;
+        }
+        #drawflow .drawflow-node.selected {
+            border-color: var(--na-accent);
+            box-shadow: 0 0 0 2px rgba(224, 69, 42, .25);
+        }
+        .flow-node .node-header { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+        .debug-panel .debug-node { color: var(--na-accent); }
     </style>
 </head>
 <body>

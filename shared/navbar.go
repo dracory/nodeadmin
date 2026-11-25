@@ -48,6 +48,10 @@ func navItems(r *http.Request, store nodestore.StoreInterface) []navItem {
 			count: count(func(ctx context.Context) (int64, error) {
 				return store.WorkflowCount(ctx, nodestore.WorkflowQuery())
 			})},
+		{label: "Nodes", key: CONTROLLER_NODES, url: link(CONTROLLER_NODES),
+			count: count(func(ctx context.Context) (int64, error) {
+				return store.NodeCount(ctx, nodestore.NodeQuery())
+			})},
 		{label: "Messages", key: CONTROLLER_MESSAGES, url: link(CONTROLLER_MESSAGES),
 			count: count(func(ctx context.Context) (int64, error) {
 				return store.MessageCount(ctx, nodestore.MessageQuery())
@@ -74,29 +78,20 @@ func navLink(item navItem, active string) *hb.Tag {
 		ClassIf(item.key == active, "active")
 	if item.count >= 0 {
 		l.Child(hb.Span().
-			Class("badge bg-secondary ms-2").
+			Class("badge text-bg-secondary ms-2").
 			HTML(strconv.Itoa(item.count)))
 	}
 	return l
 }
 
-// Navbar renders the application top-level navigation bar: brand,
-// section links (active derived from ?controller=, badges when the
-// store is available) and the Bootlegance theme switcher dropdown —
-// mode (light/dark/auto), theme picker and font-size controls. The
-// page must include bootlegance.min.js (shared.Layout emits it in
-// the head) for the switcher controls to wire up.
+// Navbar renders the application top bar: the mono brand mark with
+// the signal-red flow dot and, on the right, the Bootlegance theme
+// switcher dropdown — mode (light/dark/auto), theme picker and
+// font-size controls. Section navigation lives in SectionNav (the
+// "NODES ›" pill strip emitted inside each page's <main>). The page
+// must include bootlegance.min.js (shared.Layout emits it in the
+// head) for the switcher controls to wire up.
 func Navbar(r *http.Request, store nodestore.StoreInterface) hb.TagInterface {
-	active := activeController(r)
-	items := navItems(r, store)
-
-	lis := make([]hb.TagInterface, 0, len(items))
-	for _, item := range items {
-		lis = append(lis, hb.LI().Class("nav-item").Child(navLink(item, active)))
-	}
-
-	links := hb.UL().Class("navbar-nav me-auto").Children(lis)
-
 	modeBtn := func(label, mode string) hb.TagInterface {
 		return hb.Button().
 			Class("btn btn-sm btn-outline-secondary").
@@ -134,35 +129,26 @@ func Navbar(r *http.Request, store nodestore.StoreInterface) hb.TagInterface {
 			}),
 		})
 
-	themeDropdown := hb.Div().Class("dropdown ms-auto").Children([]hb.TagInterface{
+	themeDropdown := hb.Div().Class("dropdown").Children([]hb.TagInterface{
 		hb.Button().
-			Class("btn btn-outline-secondary dropdown-toggle").
+			Class("btn btn-sm btn-outline-secondary dropdown-toggle").
 			Attr("type", "button").
 			Attr("data-bs-toggle", "dropdown").
 			Attr("aria-expanded", "false").
-			HTML(`<i class="bi bi-palette me-1"></i>Theme`),
+			Attr("title", "Theme settings").
+			HTML(`<i class="bi bi-circle-half"></i>`),
 		themeMenu,
 	})
 
 	return hb.Nav().
-		Class("navbar navbar-expand-lg bg-body-tertiary border-bottom mb-3").
-		Child(hb.Div().Class("container-fluid").Children([]hb.TagInterface{
+		Class("na-topbar navbar navbar-expand px-3 py-2").
+		Child(hb.Div().Class("container-fluid px-0 d-flex align-items-center").Children([]hb.TagInterface{
 			hb.Hyperlink().
-				Class("navbar-brand fw-bold").
+				Class("na-brand text-body").
 				Href(NodeAdminURL(r)).
-				Text("NodeAdmin"),
-			hb.Button().
-				Class("navbar-toggler").
-				Attr("type", "button").
-				Attr("data-bs-toggle", "collapse").
-				Attr("data-bs-target", "#admin-navbar").
-				Attr("aria-controls", "admin-navbar").
-				Attr("aria-expanded", "false").
-				Attr("aria-label", "Toggle navigation").
-				Child(hb.Span().Class("navbar-toggler-icon")),
+				HTML(`<span class="flow-dot"></span>nodeadmin`),
 			hb.Div().
-				Class("collapse navbar-collapse").
-				ID("admin-navbar").
-				Children([]hb.TagInterface{links, themeDropdown}),
+				Class("ms-auto d-flex align-items-center gap-2").
+				Child(themeDropdown),
 		}))
 }

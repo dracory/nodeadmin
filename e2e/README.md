@@ -23,8 +23,8 @@ at "/"). No manual server, no shared data dir.
 ## Scenarios
 
 - `TestSectionPagesRender` — every `?controller=` page (home,
-  workflows, messages, editor, settings) renders the navbar
-  (`#admin-navbar`) and section quick bar (`.nav-pills`) with no
+  workflows, nodes, messages, editor, settings) renders the top bar
+  (`.na-topbar`) and section quick nav (`.na-quicknav`) with no
   console errors.
 - `TestEditorCreateSavePersist` — editor loads, Add Node palette lists
   node types, create workflow → add node → save → persists across a

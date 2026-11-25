@@ -11,6 +11,7 @@ const (
 const (
 	CONTROLLER_HOME      = "home"
 	CONTROLLER_WORKFLOWS = "workflows"
+	CONTROLLER_NODES     = "nodes"
 	CONTROLLER_MESSAGES  = "messages"
 	CONTROLLER_EDITOR    = "editor"
 	CONTROLLER_SETTINGS  = "settings"

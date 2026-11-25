@@ -15,15 +15,15 @@ func TestSectionPagesRender(t *testing.T) {
 	defer srv.close()
 	browser := newBrowser(t)
 
-	controllers := []string{"home", "workflows", "messages", "editor", "settings"}
+	controllers := []string{"home", "workflows", "nodes", "messages", "editor", "settings"}
 	for _, c := range controllers {
 		t.Run(c, func(t *testing.T) {
 			page, w := mustPage(t, browser, srv.browserURL("/?controller="+c))
 
-			// Top navbar (brand + section links + theme switcher).
-			waitElement(t, page, "#admin-navbar")
-			// Quick bar: the section nav pills under the navbar.
-			waitElement(t, page, ".nav-pills")
+			// Top bar (brand + theme switcher).
+			waitElement(t, page, ".na-topbar")
+			// Quick bar: the section nav pill strip under the top bar.
+			waitElement(t, page, ".na-quicknav")
 
 			// Wait for the load event to settle (deferred module errors
 			// — e.g. Vue mount failures — surface as uncaught

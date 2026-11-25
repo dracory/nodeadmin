@@ -118,6 +118,13 @@ func (s *Section) Editor(w http.ResponseWriter, r *http.Request) {
 		page = strings.Replace(page,
 			`<div id="app">`,
 			shared.Navbar(r, s.store).ToHTML()+`<div id="app">`, 1)
+		// Shared skin: the editor is a standalone page (bypasses the
+		// layout), so the same stylesheet the layout emits is injected
+		// before </head> to style the injected navbar/quicknav and the
+		// accent palette. With chrome off the host owns the outer
+		// chrome, so the skin ships with it, not with us.
+		page = strings.Replace(page,
+			`</head>`, `<style>`+shared.SkinCSS+`</style></head>`, 1)
 	} else {
 		page = strings.Replace(page,
 			`<app-navigation active="editor"></app-navigation>`, ``, 1)
