@@ -39,7 +39,7 @@ func TestDashboardPageServed(t *testing.T) {
 			t.Fatalf("%s: content type %q", path, ct)
 		}
 		body := rec.Body.String()
-		if !strings.Contains(body, "GoFlow Dashboard") || !strings.Contains(body, "goflowDashboardSend") {
+		if !strings.Contains(body, "Flow Dashboard") || !strings.Contains(body, "flowDashboardSend") {
 			t.Fatalf("%s: dashboard shell missing", path)
 		}
 	}
@@ -52,7 +52,7 @@ func TestDashboardWsEndpointExists(t *testing.T) {
 	admin := initTestAdmin(t)
 	rec := httptest.NewRecorder()
 	admin.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/dashboard/ws", nil))
-	if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "GoFlow Dashboard") {
+	if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "Flow Dashboard") {
 		t.Fatal("ws path served the page shell")
 	}
 	if strings.Contains(rec.Body.String(), "Dashboard") && rec.Code == http.StatusOK {

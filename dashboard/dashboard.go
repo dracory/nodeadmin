@@ -2,7 +2,7 @@
 // the single-file HTML shell + widget renderers ported from the
 // retiring pkg/flowdashboard. The runtime half (manifest/update/
 // input-injection websocket protocol) lives in
-// pkg/nodestore/nodes/dashboard and is mounted by nodeadmin at
+// nodebase/dashboard and is mounted by nodeadmin at
 // /dashboard/ws and /dashboard/manifest; this package owns only the
 // page itself, served for every other GET under the /dashboard/
 // mount so deep links all return the same shell. The client derives

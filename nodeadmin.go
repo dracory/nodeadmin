@@ -128,7 +128,7 @@ func New(opts Options) (Interface, error) {
 		opts.Engine = noderunner.NewWorkflowEngine()
 	}
 
-	// Always-persisted messages (task 2026_11_24_always_persisted_messages):
+	// Always-persisted messages (task always_persisted_messages):
 	// the nodestore entity DB doubles as the shared handoff store — every
 	// hop persists a node_inbox_messages row so any runner on the same DB
 	// can drain undelivered work. A caller-supplied DurableInboxStore wins.
@@ -240,7 +240,7 @@ func New(opts Options) (Interface, error) {
 				return basicAuthUser(r, users)
 			}
 		}
-		// Dashboard runtime bridge (task 2026_11_24_dashboard_hub_nodes):
+		// Dashboard runtime bridge (task dashboard_hub_nodes):
 		// the engine-agnostic hub lives in nodes/dashboard; the
 		// noderunner-specific composition point is here — New binds
 		// the UIWidgetSink seam and the hub is installed as the

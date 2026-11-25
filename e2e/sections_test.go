@@ -21,7 +21,7 @@ func TestSectionPagesRender(t *testing.T) {
 			page, w := mustPage(t, browser, srv.browserURL("/?controller="+c))
 
 			// Top navbar (brand + section links + theme switcher).
-			waitElement(t, page, "#goflow-navbar")
+			waitElement(t, page, "#admin-navbar")
 			// Quick bar: the section nav pills under the navbar.
 			waitElement(t, page, ".nav-pills")
 

@@ -31,7 +31,7 @@
                     <div class="form-text">
                         Runaway-loop guard: maximum node executions one message may trigger.
                         <code>-1</code> disables the quota. Empty inherits the startup value
-                        (<code>GOFLOW_MAX_STEPS</code>, currently {{ startup.maxSteps || 'default ' + engine.defaultMaxSteps }}).
+                        (currently {{ startup.maxSteps || 'default ' + engine.defaultMaxSteps }}).
                         Per-workflow <code>view.maxSteps</code> still wins — set it in the
                         editor's workflow properties.
                     </div>
@@ -45,7 +45,7 @@
                         <option value="disabled">Disabled</option>
                     </select>
                     <div class="form-text">
-                        Overrides <code>GOFLOW_ALLOW_EXEC</code>. Enabling lets exec nodes run
+                        Overrides the startup exec setting. Enabling lets exec nodes run
                         arbitrary shell commands — only on trusted flows.
                     </div>
                 </div>
@@ -57,7 +57,7 @@
                            :placeholder="startup.fileRoot || '(unrestricted)'">
                     <div class="form-text">
                         Sandboxes file/fileIn node paths to this directory. Overrides
-                        <code>GOFLOW_FILE_ROOT</code>. Empty inherits the startup value
+                        the startup file-root setting. Empty inherits the startup value
                         ({{ startup.fileRoot || 'unrestricted' }}).
                     </div>
                 </div>
@@ -111,7 +111,7 @@
                     <dt class="col-sm-4">Admin authentication</dt>
                     <dd class="col-sm-8">
                         <span v-if="server.authEnabled" class="badge text-bg-success">enabled</span>
-                        <span v-else class="badge text-bg-warning">disabled — set GOFLOW_AUTH_FILE</span>
+                        <span v-else class="badge text-bg-warning">disabled — configure an auth file at startup</span>
                     </dd>
 
                     <dt class="col-sm-4">Runner ID</dt>
@@ -120,13 +120,13 @@
                     <dt class="col-sm-4">Version</dt>
                     <dd class="col-sm-8"><code>{{ engine.runnerVersion || '—' }}</code></dd>
 
-                    <dt class="col-sm-4">Startup max steps (GOFLOW_MAX_STEPS)</dt>
+                    <dt class="col-sm-4">Startup max steps</dt>
                     <dd class="col-sm-8"><code>{{ startup.maxSteps || 'default (' + engine.defaultMaxSteps + ')' }}</code></dd>
 
-                    <dt class="col-sm-4">Startup exec allowed (GOFLOW_ALLOW_EXEC)</dt>
+                    <dt class="col-sm-4">Startup exec allowed</dt>
                     <dd class="col-sm-8"><code>{{ startup.allowExec }}</code></dd>
 
-                    <dt class="col-sm-4">Startup file root (GOFLOW_FILE_ROOT)</dt>
+                    <dt class="col-sm-4">Startup file root</dt>
                     <dd class="col-sm-8"><code>{{ startup.fileRoot || '(unrestricted)' }}</code></dd>
                 </dl>
             </div>

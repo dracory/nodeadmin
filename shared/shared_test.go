@@ -15,7 +15,7 @@ import (
 
 // Rendering-invariant tests for the shared chrome: Navbar/SectionNav
 // active state, count badges and the bootlegance theme-switcher
-// attributes (task 2026_11_24_admin_layer_test_coverage).
+// attributes (task admin_layer_test_coverage).
 
 // newTestStore builds an in-memory nodestore.
 func newTestStore(t *testing.T) nodestore.StoreInterface {

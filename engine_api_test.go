@@ -21,7 +21,7 @@ import (
 // to a real noderunner.WorkflowEngine through the narrow
 // api.EngineInterface contract — start/stop deploy for real, inject
 // fires, the queue endpoints reach the live queue, and the run journal
-// returns recorded executions (task 2026_11_24_cutover_p1_engine_wiring).
+// returns recorded executions (task cutover_p1_engine_wiring).
 
 // newEngineTestAdmin builds an admin backed by an in-memory sqlite
 // store and an explicit noderunner engine.

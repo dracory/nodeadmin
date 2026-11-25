@@ -4,10 +4,6 @@ Mountable admin HTTP/UI surface for nodestore-based workflows — the
 Node-RED-style flow editor, workflow management, and JSON API. Follows
 the dracory admin-module pattern (like taskadmin/shopadmin).
 
-> Currently developed inside the goflow module as `pkg/nodeadmin`;
-> this repository is the extraction target once the package is fully
-> working.
-
 ## Usage
 
 ```go

@@ -150,19 +150,19 @@ func Navbar(r *http.Request, store nodestore.StoreInterface) hb.TagInterface {
 			hb.Hyperlink().
 				Class("navbar-brand fw-bold").
 				Href(NodeAdminURL(r)).
-				Text("GoFlow"),
+				Text("NodeAdmin"),
 			hb.Button().
 				Class("navbar-toggler").
 				Attr("type", "button").
 				Attr("data-bs-toggle", "collapse").
-				Attr("data-bs-target", "#goflow-navbar").
-				Attr("aria-controls", "goflow-navbar").
+				Attr("data-bs-target", "#admin-navbar").
+				Attr("aria-controls", "admin-navbar").
 				Attr("aria-expanded", "false").
 				Attr("aria-label", "Toggle navigation").
 				Child(hb.Span().Class("navbar-toggler-icon")),
 			hb.Div().
 				Class("collapse navbar-collapse").
-				ID("goflow-navbar").
+				ID("admin-navbar").
 				Children([]hb.TagInterface{links, themeDropdown}),
 		}))
 }

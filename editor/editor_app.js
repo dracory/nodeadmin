@@ -1,5 +1,5 @@
 /**
- * editor_app.js - GoFlow workflow editor (Vue 3 + Drawflow)
+ * editor_app.js - workflow editor (Vue 3 + Drawflow)
  *
  * Loads the workflow list, renders the node canvas via Drawflow,
  * and supports drag-and-drop node creation from the palette.
@@ -87,7 +87,7 @@ function initEditorApp() {
                 importJson: '',
                 importError: '',
                 // Module import modal (module_export_import): pasted
-                // GoFlow module envelope merged into this workflow.
+                // module envelope merged into this workflow.
                 moduleImportJson: '',
                 moduleImportError: '',
                 // Subflow definitions are canvas modules now: each
@@ -205,7 +205,7 @@ function initEditorApp() {
                 // /api/node-run-journal.
                 runDetails: { nodeId: null, entries: [], size: 0, loading: false, error: '' },
                 // Workflow properties modal (task
-                // 2026_11_23_workflow_properties): name/description ride
+                // workflow_properties): name/description ride
                 // the workflow document; the rest are flow-level
                 // settings persisted under selectedWorkflow.view and
                 // merged on save (saveWorkflow preserves unrelated view
@@ -225,7 +225,7 @@ function initEditorApp() {
             // Node ids are UUIDv7 instead of Drawflow's counter
             this.editor.useuuid = true;
             this.editor.getUuid = () => this.nextNodeId();
-            // floweditor options (task 2026_11_22_editor_new_options)
+            // floweditor options (task editor_new_options)
             // multiselect: Ctrl/Shift-click additive selection, Shift-drag
             // selection box, group drag, Delete removes the selection,
             // Ctrl+A selects all. 'selectionChanged' below keeps
@@ -1733,7 +1733,7 @@ function initEditorApp() {
 
             /**
              * Node types supporting the opt-in errorCatch flag
-             * (task 2026_11_23_error_catch_port): the engine appends a
+             * (task error_catch_port): the engine appends a
              * dedicated "error" port after the normal outputs.
              */
             supportsErrorCatch(typeId) {
@@ -1884,7 +1884,7 @@ function initEditorApp() {
 
             addNode(typeId, name, x, y, data) {
                 // Unknown types (e.g. imported Node-RED nodes with no
-                // GoFlow equivalent) keep their raw id so the type
+                // engine equivalent) keep their raw id so the type
                 // survives a save/load round-trip; they render with a
                 // visual "unknown" marker instead of being retyped.
                 const known = this.findType(typeId);
@@ -1953,7 +1953,7 @@ function initEditorApp() {
                        </div>`
                     : '';
                 const html = `
-                    <div class="goflow-node ${type.id}${known ? '' : ' goflow-node-unknown'}">
+                    <div class="flow-node ${type.id}${known ? '' : ' flow-node-unknown'}">
                         <div class="node-header" style="background:${type.color}">${this.escapeHtml(nodeData.name)}</div>
                         <div class="node-body">
                             <div>Type: ${this.escapeHtml(type.id)}${known ? '' : ' <span class="badge text-bg-secondary">unknown</span>'}</div>
@@ -2096,10 +2096,10 @@ function initEditorApp() {
                 const idx = this.selectedNodeIds.indexOf(id);
                 if (idx !== -1) {
                     this.selectedNodeIds.splice(idx, 1);
-                    if (el) el.classList.remove('goflow-selected');
+                    if (el) el.classList.remove('flow-selected');
                 } else {
                     this.selectedNodeIds.push(id);
-                    if (el) el.classList.add('goflow-selected');
+                    if (el) el.classList.add('flow-selected');
                 }
             },
 
@@ -2110,7 +2110,7 @@ function initEditorApp() {
                 }
                 this.selectedNodeIds.forEach(id => {
                     const el = document.getElementById('node-' + id);
-                    if (el) el.classList.remove('goflow-selected');
+                    if (el) el.classList.remove('flow-selected');
                 });
                 this.selectedNodeIds = [];
             },
@@ -2214,7 +2214,7 @@ function initEditorApp() {
              */
             setNodeDisabledDom(nodeId, disabled) {
                 const el = document.getElementById('node-' + nodeId);
-                if (el) el.classList.toggle('goflow-node-disabled', !!disabled);
+                if (el) el.classList.toggle('flow-node-disabled', !!disabled);
             },
 
             /**
@@ -2582,7 +2582,7 @@ function initEditorApp() {
              */
             showToast(message, type) {
                 const toast = document.createElement('div');
-                toast.className = 'goflow-toast alert alert-' + (type || 'warning') + ' py-2 px-3 shadow';
+                toast.className = 'flow-toast alert alert-' + (type || 'warning') + ' py-2 px-3 shadow';
                 toast.textContent = message;
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 3500);
@@ -4468,7 +4468,7 @@ function initEditorApp() {
                 if (row.type === 'workflow') {
                     this.dragWorkflowId = row.workflow.id;
                     try {
-                        e.dataTransfer.setData('text/goflow-workflow', String(row.workflow.id));
+                        e.dataTransfer.setData('text/x-flow-workflow', String(row.workflow.id));
                         e.dataTransfer.effectAllowed = 'move';
                     } catch (err) { /* drag data is best-effort */ }
                     return;
@@ -4479,7 +4479,7 @@ function initEditorApp() {
                 }
                 this.dragModuleKey = row.item.module;
                 try {
-                    e.dataTransfer.setData('text/goflow-module', row.item.module);
+                    e.dataTransfer.setData('text/x-flow-module', row.item.module);
                     e.dataTransfer.effectAllowed = 'move';
                 } catch (err) { /* drag data is best-effort */ }
             },
@@ -4545,8 +4545,8 @@ function initEditorApp() {
             /* ---- Module export/import (module_export_import) ---- */
 
             /**
-             * Export one module as a portable GoFlow module envelope
-             * ({goflow:"module", version:1}) and copy it to the
+             * Export one module as a portable module envelope
+             * ({nodestore:"module", version:1}) and copy it to the
              * clipboard. Saves first when the canvas is dirty so the
              * export reflects the visible state. External references
              * the export kept but could not resolve come back as

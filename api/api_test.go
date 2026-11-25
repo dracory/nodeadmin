@@ -23,7 +23,7 @@ import (
 // exercised through httptest against a real in-memory nodestore and a
 // fake EngineInterface — the same narrow contract
 // noderunner.WorkflowEngine satisfies in production (task
-// 2026_11_24_admin_layer_test_coverage).
+// admin_layer_test_coverage).
 
 // newTestStore builds an in-memory nodestore (single connection so
 // the :memory: database is shared).

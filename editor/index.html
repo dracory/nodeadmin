@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoFlow - Workflow Editor</title>
+    <title>Workflow Editor</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
@@ -183,7 +183,7 @@
             background: rgba(13, 110, 253, .18);
         }
         /* Disabled nodes render dimmed (Node-RED parity cue) */
-        #drawflow .drawflow-node.goflow-node-disabled {
+        #drawflow .drawflow-node.flow-node-disabled {
             opacity: .45;
         }
         /* Floating canvas zoom controls (task 08) */
@@ -237,12 +237,12 @@
         }
         /* Node groups (task 36/39): layer/box styles live in
            floweditor's drawflow.min.css since the model moved there */
-        .goflow-selected {
+        .flow-selected {
             outline: 2px solid #0d6efd !important;
             outline-offset: 1px;
         }
         /* Node context menu (task 09) */
-        .goflow-context-menu {
+        .flow-context-menu {
             position: fixed;
             z-index: 3000;
             background: var(--bs-body-bg);
@@ -291,24 +291,24 @@
             border-color: #0d6efd;
             box-shadow: 0 0 0 2px rgba(13, 110, 253, .25);
         }
-        .goflow-node .node-header {
+        .flow-node .node-header {
             padding: 6px 10px;
             color: #fff;
             font-weight: 600;
             border-radius: 3px 3px 0 0;
         }
-        .goflow-node .node-body {
+        .flow-node .node-body {
             padding: 8px 10px;
             font-size: .85rem;
             color: var(--drawflow-node-color, #555);
         }
         /* Fallback header colors for legacy types; dynamically typed nodes
            set the header color inline in the node template */
-        .goflow-node.start .node-header { background: #4CAF50; }
-        .goflow-node.process .node-header { background: #2196F3; }
-        .goflow-node.decision .node-header { background: #FFC107; }
-        .goflow-node.end .node-header { background: #F44336; }
-        .goflow-node .node-summary {
+        .flow-node.start .node-header { background: #4CAF50; }
+        .flow-node.process .node-header { background: #2196F3; }
+        .flow-node.decision .node-header { background: #FFC107; }
+        .flow-node.end .node-header { background: #F44336; }
+        .flow-node .node-summary {
             color: #888;
             font-size: .78rem;
             white-space: nowrap;
@@ -328,7 +328,7 @@
             pointer-events: none;
         }
         /* Transient toast feedback */
-        .goflow-toast {
+        .flow-toast {
             position: fixed;
             top: 70px;
             right: 20px;
@@ -717,7 +717,7 @@
                 </div>
 
                 <!-- Node context menu (task 09) -->
-                <div v-if="contextMenu.show" class="goflow-context-menu shadow"
+                <div v-if="contextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
                     <button class="dropdown-item" @click="duplicateNode(contextMenu.nodeId); closeContextMenu()">
                         <i class="fas fa-copy me-2"></i>Duplicate
@@ -758,7 +758,7 @@
                 </div>
 
                 <!-- Module tree context menu (module navigator) -->
-                <div v-if="moduleContextMenu.show" class="goflow-context-menu shadow"
+                <div v-if="moduleContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: moduleContextMenu.x + 'px', top: moduleContextMenu.y + 'px' }">
                     <button class="dropdown-item"
                             @click="openModuleItem({ module: moduleContextMenu.module, label: moduleLabelFor(moduleContextMenu.module), role: moduleRoleFor(moduleContextMenu.module) }); closeModuleContextMenu()">
@@ -799,7 +799,7 @@
                 <!-- Folder context menu (sidebar_file_tree): folders
                      organize the tree only — no deploy/env/disabled
                      semantics. -->
-                <div v-if="folderContextMenu.show" class="goflow-context-menu shadow"
+                <div v-if="folderContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: folderContextMenu.x + 'px', top: folderContextMenu.y + 'px' }">
                     <button class="dropdown-item"
                             @click="createModuleInFolder('flow', folderContextMenu.folderId); closeFolderContextMenu()">
@@ -826,7 +826,7 @@
                 <!-- Workflow row context menu (workflow_groups):
                      properties + module-folder creation (selects the
                      workflow first) + group membership moves. -->
-                <div v-if="workflowContextMenu.show" class="goflow-context-menu shadow"
+                <div v-if="workflowContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: workflowContextMenu.x + 'px', top: workflowContextMenu.y + 'px' }">
                     <button class="dropdown-item"
                             @click="openWorkflowPropsFor(workflowById(workflowContextMenu.workflowId)); closeWorkflowContextMenu()">
@@ -850,7 +850,7 @@
 
                 <!-- Workflow group context menu: organization only —
                      delete never removes member workflows. -->
-                <div v-if="workflowGroupContextMenu.show" class="goflow-context-menu shadow"
+                <div v-if="workflowGroupContextMenu.show" class="flow-context-menu shadow"
                      :style="{ left: workflowGroupContextMenu.x + 'px', top: workflowGroupContextMenu.y + 'px' }">
                     <button class="dropdown-item"
                             @click="createWorkflowGroup(workflowGroupContextMenu.groupId); closeWorkflowGroupContextMenu()">
@@ -964,7 +964,7 @@
                               :class="{ 'is-invalid': importError }"
                               placeholder='Paste the JSON produced by Export...'></textarea>
                     <div class="invalid-feedback">{{ importError }}</div>
-                    <small class="form-text text-muted">Accepts a GoFlow canvas export or a Node-RED
+                    <small class="form-text text-muted">Accepts a canvas export or a Node-RED
                         flow JSON array (imported as a new workflow, subflows included).</small>
                 </div>
                 <div class="modal-footer">
@@ -991,7 +991,7 @@
                     <textarea class="form-control font-monospace" rows="10"
                               v-model="moduleImportJson"
                               :class="{ 'is-invalid': moduleImportError }"
-                              placeholder='Paste a GoFlow module export ({ "goflow": "module", ... })...'></textarea>
+                              placeholder='Paste a module export ({ "nodestore": "module", ... })...'></textarea>
                     <div class="invalid-feedback">{{ moduleImportError }}</div>
                     <small class="form-text text-muted">Adds a new module to the selected workflow.
                         Node and module ids are re-minted; references to nodes outside the
@@ -1284,7 +1284,7 @@
         </div>
     </div>
 
-    <!-- Workflow properties modal (task 2026_11_23_workflow_properties):
+    <!-- Workflow properties modal (task workflow_properties):
          rename + description + the flow-level view settings that had no
          UI home (view.onError / maxSteps / inbox*). Saved through the
          same update path as the canvas — the modal marks the workflow

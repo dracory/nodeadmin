@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GoFlow Dashboard</title>
+<title>Flow Dashboard</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: system-ui, sans-serif; margin: 0; background: #f4f4f5; color: #18181b; }
@@ -52,7 +52,7 @@
 </head>
 <body>
 <header>
-  <h1>GoFlow Dashboard</h1>
+  <h1>Flow Dashboard</h1>
   <span class="status" id="status">connecting…</span>
 </header>
 <main id="root"><div id="empty">Waiting for manifest…</div></main>
@@ -71,7 +71,7 @@
   // `fresh` is false while replaying manifest state (late-join), so
   // live-only widgets (uiNotification) can skip stale updates. The
   // fallback dumps state JSON so unknown widgets still show something.
-  var renderers = window.goflowDashboardRenderers = window.goflowDashboardRenderers || {};
+  var renderers = window.flowDashboardRenderers = window.flowDashboardRenderers || {};
   renderers["*"] = function (el, widget, state) {
     el.querySelector(".body").innerHTML = "<pre>" + esc(JSON.stringify(state || {}, null, 2)) + "</pre>";
   };
@@ -204,12 +204,12 @@
   // --- Input widget renderers (dashboard_widgets_in) -------------
   // Interaction → {"type":"input","node":id,"msg":{payload, ui}} ws
   // frame → hub → InjectMessage downstream of the widget node.
-  // sendWidget wraps goflowDashboardSend: the msg.ui convention is
+  // sendWidget wraps flowDashboardSend: the msg.ui convention is
   // {widget: node id, event: "click"|"submit"}; a dropped send (socket
   // not open — nothing is queued) fails visibly with a toast.
 
   function sendWidget(widget, event, payload) {
-    var ok = window.goflowDashboardSend(widget.id, {
+    var ok = window.flowDashboardSend(widget.id, {
       payload: payload,
       ui: { widget: widget.id, event: event }
     });
@@ -380,10 +380,10 @@
   }
 
   // Public send helper for widget renderers (e.g. a button calls
-  // goflowDashboardSend("n1", {payload: "clicked"})). Returns false
+  // flowDashboardSend("n1", {payload: "clicked"})). Returns false
   // when the socket is not open — nothing is queued, so callers must
   // surface the failure (sendWidget toasts).
-  window.goflowDashboardSend = function (node, msg) {
+  window.flowDashboardSend = function (node, msg) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       var frame = { type: "input", node: node };
       if (msg !== undefined) { frame.msg = msg; }

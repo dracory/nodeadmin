@@ -19,7 +19,7 @@ import (
 // the API never names a concrete runner — and
 // noderunner.WorkflowEngine satisfies it structurally. Queue and
 // journal data travel through the runner-agnostic contract types in
-// pkg/nodestore/nodes (QueueInspector, RunJournalEntry).
+// nodebase (QueueInspector, RunJournalEntry).
 type EngineInterface interface {
 	// DeployWorkflow starts a workflow and waits for activation to
 	// finish (full deploy: every node restarts).

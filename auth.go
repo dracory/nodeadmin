@@ -128,6 +128,6 @@ func BasicAuthenticator(path string) (func(r *http.Request) (string, bool), erro
 
 // requireAuth replies with a Basic-auth challenge
 func requireAuth(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="goflow"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="nodeadmin"`)
 	http.Error(w, "authentication required", http.StatusUnauthorized)
 }

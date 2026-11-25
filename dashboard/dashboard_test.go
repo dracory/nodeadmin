@@ -22,7 +22,7 @@ func TestPage(t *testing.T) {
 		t.Fatalf("content-type = %q", ct)
 	}
 	body := rec.Body.String()
-	for _, needle := range []string{"<title>GoFlow Dashboard</title>", "<main"} {
+	for _, needle := range []string{"<title>Flow Dashboard</title>", "<main"} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("page missing %q", needle)
 		}
