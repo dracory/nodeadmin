@@ -3060,6 +3060,8 @@ function initEditorApp() {
              */
             schemaFieldType(prop) {
                 if (prop && (Array.isArray(prop.enum) || Array.isArray(prop.options))) return 'select';
+                if (prop && prop.format === 'typedinput') return 'typedinput';
+                if (prop && prop.type === 'array' && prop.items && prop.items.properties) return 'items';
                 switch (prop && prop.type) {
                     case 'boolean': return 'checkbox';
                     case 'number':
@@ -3103,6 +3105,54 @@ function initEditorApp() {
             },
 
             /**
+             * Enum options normalize to {value, label, description} —
+             * rich selects render the label with its explanation beneath
+             * (Bootstrap dropdown). Sources: prop.options
+             * ([{value,title,description}|string]) or prop.enum +
+             * prop.enumDescriptions {value: text}.
+             */
+            schemaOptions(prop) {
+                const rawOpts = Array.isArray(prop.options) ? prop.options
+                    : (Array.isArray(prop.enum) ? prop.enum : null);
+                return rawOpts && rawOpts.map(o => {
+                    if (o && typeof o === 'object') {
+                        return {
+                            value: o.value !== undefined ? o.value : o.title,
+                            label: o.title || o.label || String(o.value),
+                            description: o.description || ''
+                        };
+                    }
+                    return {
+                        value: o,
+                        label: String(o),
+                        description: (prop.enumDescriptions && prop.enumDescriptions[o]) || ''
+                    };
+                });
+            },
+
+            /**
+             * Normalize one sub-property of an array item into a row
+             * field {key,title,field,options,typeField,types,default,
+             * defaultType} — the pieces an "items" row editor needs.
+             * A format:"typedinput" field declares typeField: the
+             * sibling item key holding the value's type (Node-RED vt).
+             */
+            schemaItemField(key, sub) {
+                return {
+                    key,
+                    title: (sub && sub.title) || key,
+                    description: (sub && sub.description) || '',
+                    field: this.schemaFieldType(sub),
+                    options: this.schemaOptions(sub || {}),
+                    typeField: (sub && sub.typeField) || null,
+                    types: (sub && sub.typedInputTypes) || ['msg', 'str', 'num', 'bool', 'json'],
+                    default: sub && sub.default,
+                    defaultType: (sub && sub.defaultType)
+                        || (sub && sub.typedInputTypes && sub.typedInputTypes[0]) || 'str'
+                };
+            },
+
+            /**
              * Normalize a JSON schema into a flat field list for the form
              */
             buildSchemaFields(schema, nodeData) {
@@ -3113,27 +3163,8 @@ function initEditorApp() {
                 Object.keys(props).forEach(key => {
                     const prop = props[key] || {};
                     let field = this.schemaFieldType(prop);
-                    // Enum options normalize to {value, label,
-                    // description} — rich selects render the label
-                    // with its explanation beneath (Bootstrap dropdown).
-                    // Sources: prop.options ([{value,title,description}|string])
-                    // or prop.enum + prop.enumDescriptions {value: text}.
-                    const rawOpts = Array.isArray(prop.options) ? prop.options
-                        : (Array.isArray(prop.enum) ? prop.enum : null);
-                    let options = rawOpts && rawOpts.map(o => {
-                        if (o && typeof o === 'object') {
-                            return {
-                                value: o.value !== undefined ? o.value : o.title,
-                                label: o.title || o.label || String(o.value),
-                                description: o.description || ''
-                            };
-                        }
-                        return {
-                            value: o,
-                            label: String(o),
-                            description: (prop.enumDescriptions && prop.enumDescriptions[o]) || ''
-                        };
-                    });
+                    let options = this.schemaOptions(prop);
+                    let itemFields = null;
                     let value = nodeData && nodeData[key] !== undefined ? nodeData[key]
                         : (prop.default !== undefined ? prop.default
                             : (field === 'checkbox' ? false : (field === 'json' ? {} : '')));
@@ -3152,6 +3183,20 @@ function initEditorApp() {
                         field = 'nodeselect';
                         options = this.linkPeerNodes(prop.peerType);
                         value = value == null ? '' : String(value);
+                    } else if (field === 'items') {
+                        // Node-RED-style row editor: each array element
+                        // is an object whose sub-fields render inline.
+                        const iprops = (prop.items && prop.items.properties) || {};
+                        itemFields = Object.keys(iprops).map(k => this.schemaItemField(k, iprops[k]));
+                        value = Array.isArray(value) ? JSON.parse(JSON.stringify(value)) : [];
+                        // Fill missing typeField values on loaded rows.
+                        value.forEach(row => {
+                            itemFields.forEach(sf => {
+                                if (sf.typeField && row[sf.typeField] === undefined) {
+                                    row[sf.typeField] = sf.defaultType;
+                                }
+                            });
+                        });
                     } else if (field === 'json') {
                         value = JSON.stringify(value, null, 2);
                     }
@@ -3162,6 +3207,7 @@ function initEditorApp() {
                         description: prop.description || '',
                         field,
                         options,
+                        itemFields,
                         // rich selects show each option's description
                         // under its label (Bootstrap dropdown)
                         rich: field === 'select' && !!options && options.some(o => o.description),
@@ -3183,6 +3229,34 @@ function initEditorApp() {
              * the current form value (compared as strings so booleans
              * and numbers work too).
              */
+            /**
+             * Row editor helpers for "items" fields — add / remove /
+             * reorder rows of {sub-field: value} objects (Node-RED's
+             * rules-list pattern: switch rules, change rules, inject
+             * props).
+             */
+            addItemRow(field) {
+                if (!Array.isArray(this.editingNodeForm[field.key])) {
+                    this.editingNodeForm[field.key] = [];
+                }
+                const row = {};
+                (field.itemFields || []).forEach(sf => {
+                    row[sf.key] = sf.default !== undefined ? sf.default
+                        : (sf.field === 'checkbox' ? false : '');
+                    if (sf.typeField) row[sf.typeField] = sf.defaultType;
+                });
+                this.editingNodeForm[field.key].push(row);
+            },
+            removeItemRow(field, i) {
+                this.editingNodeForm[field.key].splice(i, 1);
+            },
+            moveItemRow(field, i, dir) {
+                const a = this.editingNodeForm[field.key];
+                const j = i + dir;
+                if (!a || j < 0 || j >= a.length) return;
+                a.splice(j, 0, a.splice(i, 1)[0]);
+            },
+
             /**
              * Label shown on a rich-select dropdown button — the
              * selected option's label (or its raw value).

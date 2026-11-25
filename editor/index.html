@@ -1179,6 +1179,56 @@
                                     :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
                                 <option v-for="opt in field.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
+                            <!-- Node-RED-style list editor: one row per
+                                 item, sub-fields inline (rules, props) -->
+                            <div v-else-if="field.field === 'items'" class="border rounded p-2">
+                                <div v-if="!editingNodeForm[field.key] || !editingNodeForm[field.key].length"
+                                     class="text-muted small mb-2">No entries — add one below.</div>
+                                <div v-for="(row, i) in editingNodeForm[field.key]" :key="i"
+                                     class="d-flex align-items-center gap-1 mb-2 pb-2 border-bottom">
+                                    <div class="flex-grow-1 d-flex flex-wrap align-items-center gap-1">
+                                        <template v-for="sf in field.itemFields" :key="sf.key">
+                                            <!-- typedInput: type dropdown + value input
+                                                 (writes the sibling typeField on the row) -->
+                                            <div v-if="sf.field === 'typedinput'" class="input-group input-group-sm"
+                                                 style="width: auto; min-width: 220px;" :title="sf.description || sf.title">
+                                                <select class="form-select form-select-sm" style="max-width: 105px;"
+                                                        v-model="row[sf.typeField]">
+                                                    <option v-for="t in sf.types" :key="t" :value="t">{{ t }}</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm flex-fill"
+                                                       style="min-width: 90px;" :placeholder="sf.title"
+                                                       v-model="row[sf.key]">
+                                            </div>
+                                            <select v-else-if="sf.field === 'select'"
+                                                    class="form-select form-select-sm" style="width: auto;"
+                                                    v-model="row[sf.key]" :title="sf.description || sf.title">
+                                                <option v-for="o in sf.options" :key="o.value" :value="o.value"
+                                                        :title="o.description">{{ o.label }}</option>
+                                            </select>
+                                            <input v-else-if="sf.field === 'checkbox'" type="checkbox"
+                                                   class="form-check-input" v-model="row[sf.key]"
+                                                   :title="sf.description || sf.title">
+                                            <input v-else-if="sf.field === 'number'" type="number"
+                                                   class="form-control form-control-sm" style="width: 90px;"
+                                                   :placeholder="sf.title" v-model="row[sf.key]">
+                                            <input v-else type="text" class="form-control form-control-sm flex-fill"
+                                                   style="min-width: 80px; max-width: 220px;" :placeholder="sf.title"
+                                                   v-model="row[sf.key]" :title="sf.description || sf.title">
+                                        </template>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary px-1"
+                                            :disabled="i === 0" @click="moveItemRow(field, i, -1)"
+                                            title="Move up">&#8593;</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary px-1"
+                                            :disabled="i === editingNodeForm[field.key].length - 1"
+                                            @click="moveItemRow(field, i, 1)" title="Move down">&#8595;</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger px-2"
+                                            @click="removeItemRow(field, i)" title="Remove">&times;</button>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        @click="addItemRow(field)">+ Add</button>
+                            </div>
                             <div v-else-if="field.field === 'checkbox'" class="form-check">
                                 <input type="checkbox" class="form-check-input" :id="'prop-' + field.key"
                                        v-model="editingNodeForm[field.key]"
