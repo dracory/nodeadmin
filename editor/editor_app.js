@@ -1911,6 +1911,9 @@ function initEditorApp() {
                 const data = (node && node.data) || {};
                 if (typeId === 'switch') return this.switchOutputCount(data);
                 if (typeId === 'checkpoint') return this.checkpointOutputCount(data);
+                // delay: outputs:2 adds the burst port for dropped
+                // rate-limiter messages (numeric config, not labels).
+                if (typeId === 'delay') return Number(data.outputs) === 2 ? 2 : 1;
                 if (this.supportsErrorCatch(typeId)) {
                     const type = this.findType(typeId) || { id: typeId, outputs: 1 };
                     return this.errorCatchOutputCount(type, data);
