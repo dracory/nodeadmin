@@ -22,8 +22,9 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor"))
 	waitVueApp(t, page)
 
-	// Vue mounted: the explorer tree and toolbar rendered.
-	waitElement(t, page, ".editor-toolbar")
+	// Vue mounted: no workflow is open yet, so the workspace is
+	// hidden and the welcome screen shows (editor_empty_state).
+	waitElement(t, page, ".editor-welcome")
 
 	// New workflow via the explorer "+" dropdown (JS clicks —
 	// chromedp's pointer click waits for scroll-into-view stability
@@ -80,6 +81,52 @@ func TestEditorCreateSavePersist(t *testing.T) {
 		chromedp.Navigate(srv.browserURL("/?controller=editor"))))
 	waitVueApp(t, page)
 	waitElementText(t, page, ".module-item", "E2E Flow")
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
+
+// TestEditorEmptyState covers the welcome screen (editor_empty_state):
+// with no workflow selected the editor workspace (tabs, toolbar,
+// canvas) is hidden and the welcome screen fills the pane instead.
+// Creating a workflow restores the workspace; closing the last tab
+// returns to the welcome screen.
+func TestEditorEmptyState(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-editor-empty.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor"))
+	waitVueApp(t, page)
+
+	workspaceHidden := `getComputedStyle(document.querySelector('.editor-workspace')).display === 'none'`
+
+	// Empty state: welcome visible, workspace hidden, no open tabs.
+	waitElement(t, page, ".editor-welcome")
+	require.True(t, evalBool(t, page, workspaceHidden),
+		"editor workspace must be hidden with no selected workflow")
+	require.Zero(t, elementsLen(t, page, ".flow-tabs .flow-tab:not(.flow-tab-add)"),
+		"no flow tab may be open without a selected workflow")
+
+	// Create a workflow: the workspace returns with a flow tab.
+	click(t, page, `button[title="New workflow or workflow group"]`)
+	clickText(t, page, ".dropdown-item", "New workflow")
+	setInput(t, page, "#newWorkflowModal input", "E2E Empty State")
+	click(t, page, "#newWorkflowModal .btn-primary")
+
+	waitElement(t, page, ".flow-tabs .flow-tab:not(.flow-tab-add)")
+	require.False(t, evalBool(t, page, workspaceHidden),
+		"editor workspace must be visible once a workflow is open")
+	require.True(t, evalBool(t, page,
+		`getComputedStyle(document.querySelector('.editor-welcome')).display === 'none'`),
+		"welcome screen must hide once a workflow is open")
+
+	// Closing the last tab returns to the welcome screen.
+	click(t, page, ".flow-tabs .flow-tab .flow-tab-close")
+	waitElement(t, page, ".editor-welcome")
+	require.True(t, evalBool(t, page, workspaceHidden),
+		"editor workspace must hide again after the last tab closes")
 
 	if errs := w.errors(); len(errs) > 0 {
 		t.Fatalf("console errors on editor: %v", errs)

@@ -114,8 +114,11 @@ function initEditorApp() {
                 // Since the module navigator landed, tabs are only the
                 // OPEN modules (VS Code model) — the sidebar tree lists
                 // every materialized module and is the source of truth.
-                flowTabs: [{ module: 'Home', label: 'Main', role: 'flow' }],
-                activeTab: 'Home',
+                // Empty by default (editor_empty_state): no selected
+                // workflow means no open tabs, and no open tabs means
+                // the workspace is replaced by the welcome screen.
+                flowTabs: [],
+                activeTab: null,
                 // Module navigator: knownModules is the last synced set of
                 // canvas module keys (used to tell reopened vs. brand-new
                 // modules apart in syncTabsFromEditor); moduleTreeVersion
@@ -2714,6 +2717,13 @@ function initEditorApp() {
                     this.importNodeRedFlow(parsed);
                     return;
                 }
+                // Drawflow-JSON imports target the open editor — with no
+                // workflow selected there is none (editor_empty_state).
+                // The Node-RED path above is the empty-state import.
+                if (!this.selectedWorkflow) {
+                    this.importError = 'Drawflow JSON needs an open workflow — paste a Node-RED flow export (JSON array) to create one, or create/select a workflow first';
+                    return;
+                }
                 this.pushHistory();
                 try {
                     this.editor.import(parsed);
@@ -4210,14 +4220,16 @@ function initEditorApp() {
              * a separate tree action (deleteModuleByName).
              */
             closeFlowTab(tab) {
-                if (this.flowTabs.length <= 1) {
-                    this.showToast('At least one flow tab is required', 'info');
-                    return;
-                }
                 if (this.editor.module === tab.module) {
                     const idx = this.flowTabs.findIndex(t => t.module === tab.module);
                     const next = this.flowTabs[idx === 0 ? 1 : idx - 1];
-                    this.switchTab(next);
+                    // Closing the last tab empties the workspace — the
+                    // welcome screen takes over (editor_empty_state).
+                    if (next && next !== tab) {
+                        this.switchTab(next);
+                    } else {
+                        this.activeTab = null;
+                    }
                 }
                 this.flowTabs = this.flowTabs.filter(t => t.module !== tab.module);
                 this.moduleTreeVersion++;
@@ -4813,19 +4825,8 @@ function initEditorApp() {
                             role: this.moduleRoleFor(m)
                         };
                     });
-                if (!this.flowTabs.length && modules.length) {
-                    const m = modules[0];
-                    this.flowTabs = [{
-                        module: m,
-                        label: this.moduleLabelFor(m),
-                        role: this.moduleRoleFor(m)
-                    }];
-                }
-                if (!this.flowTabs.length) {
-                    this.flowTabs = [{ module: 'Home', label: 'Main', role: 'flow' }];
-                }
                 this.knownModules = modules.slice();
-                this.activeTab = this.editor.module;
+                this.activeTab = this.flowTabs.length ? this.editor.module : null;
                 this.moduleTreeVersion++;
             }
         },

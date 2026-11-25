@@ -278,6 +278,51 @@
             flex: none;
             padding: 0 8px;
         }
+        /* Workspace wrapper: keeps .editor-pane's flex chain intact so
+           #drawflow still stretches (editor_empty_state). */
+        .editor-workspace {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .editor-welcome {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            text-align: center;
+            padding: 3rem 2rem 2rem;
+        }
+        .editor-welcome-logo {
+            font-size: 4rem;
+            color: var(--bs-secondary-color);
+            opacity: .35;
+        }
+        .editor-welcome-actions {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            min-width: 420px;
+            text-align: left;
+        }
+        .editor-welcome-action {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2rem;
+            padding: .35rem .75rem;
+            border: 1px solid var(--bs-border-color);
+            border-radius: .375rem;
+            background: transparent;
+            color: var(--bs-body-color);
+            font-size: .95rem;
+        }
+        button.editor-welcome-action:hover {
+            background: var(--bs-tertiary-bg);
+        }
 
         /* Drawflow node styling (Node-RED style: colored header + body) */
         #drawflow .drawflow-node {
@@ -591,6 +636,12 @@
 
             <!-- Editor pane -->
             <div class="col-md-9 col-lg-10 editor-pane">
+                <!-- With no open flow tabs there is no editor at all —
+                     the VS Code model: the workspace (tabs, toolbar,
+                     canvas) is hidden and the welcome screen takes its
+                     place. v-show (not v-if) keeps #drawflow mounted for
+                     the Drawflow instance created in mounted(). -->
+                <div class="editor-workspace" v-show="flowTabs.length > 0">
                 <!-- Flow tabs (task 11): each tab is a Drawflow module;
                      toolbar shares the row so it never overlays tab labels -->
                 <div class="editor-header d-flex align-items-end">
@@ -602,7 +653,7 @@
                             @contextmenu.prevent="toggleFlowTabDisabled(tab)">
                         <i v-if="tab.role === 'subflow'" class="fas fa-object-group me-1" title="Subflow template module"></i>{{ tab.label }}
                         <i v-if="tab.disabled" class="fas fa-ban ms-1" title="Flow disabled"></i>
-                        <span v-if="flowTabs.length > 1" class="flow-tab-close"
+                        <span class="flow-tab-close"
                               title="Close flow" @click.stop="closeFlowTab(tab)">&times;</span>
                     </button>
                     <button class="flow-tab flow-tab-add" title="New flow" @click="addFlowTab">
@@ -714,6 +765,30 @@
                          :style="{ left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px', background: r.color }"></div>
                     <div v-if="minimapView" class="minimap-view"
                          :style="{ left: minimapView.x + 'px', top: minimapView.y + 'px', width: minimapView.w + 'px', height: minimapView.h + 'px' }"></div>
+                </div>
+                </div>
+
+                <!-- Welcome screen (editor_empty_state): replaces the whole
+                     workspace when no flow tab is open. Lists only actions
+                     that are valid with nothing selected. -->
+                <div class="editor-welcome" v-show="flowTabs.length === 0">
+                    <i class="fas fa-diagram-project editor-welcome-logo"></i>
+                    <h3 class="mt-3 mb-1">GoFlow</h3>
+                    <p class="text-muted mb-4">Select a workflow from the Explorer or create a new one to start building.</p>
+                    <div class="editor-welcome-actions">
+                        <div class="editor-welcome-action">
+                            <span>Select a workflow</span>
+                            <span class="text-muted">click a workflow in the Explorer</span>
+                        </div>
+                        <button class="editor-welcome-action" @click="createWorkflow">
+                            <span>New workflow</span>
+                            <span class="text-muted"><i class="fas fa-plus me-1"></i>beside WORKFLOWS</span>
+                        </button>
+                        <button class="editor-welcome-action" @click="openImportModal">
+                            <span>Import a flow</span>
+                            <span class="text-muted">Node-RED JSON creates a new workflow</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Node context menu (task 09) -->
