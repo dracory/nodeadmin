@@ -3,11 +3,26 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// waitExpr polls a page JS expression until it returns truthy.
+func waitExpr(t *testing.T, ctx context.Context, expr, what string) {
+	t.Helper()
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
+		if evalBool(t, ctx, expr) {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
 
 // TestEditorSwitchDynamicOutputs covers config-driven output ports
 // (task dynamic_output_ports): saving switch properties with more
@@ -36,6 +51,13 @@ func TestEditorSwitchDynamicOutputs(t *testing.T) {
 	// proxy exposes the editor methods used below.
 	vm := `document.getElementById('app').__vue_app__._instance.proxy`
 
+	// The deep link selects the workflow asynchronously: nodes added
+	// before changeModule/import finishes are wiped by the incoming
+	// module data. Wait until the workflow is the selected one.
+	waitExpr(t, page,
+		`(function(){ const vm = `+vm+`; return vm.selectedWorkflow && String(vm.selectedWorkflow.id) === `+js(id)+`; })()`,
+		"workflow to be selected")
+
 	// A default switch node has two rules -> two outputs. Wire a debug
 	// node onto its second (last) output so a later shrink must drop it.
 	var ids map[string]any
@@ -49,6 +71,7 @@ func TestEditorSwitchDynamicOutputs(t *testing.T) {
 	})()`, &ids))
 	require.Equal(t, float64(2), ids["outs"],
 		"default switch should render two output ports")
+	t.Logf("node ids: %v", ids)
 
 	// saveSwitch drives the real JSON-fallback save path: set the
 	// form state openNodeProperties populates, force the raw-JSON
@@ -63,24 +86,26 @@ func TestEditorSwitchDynamicOutputs(t *testing.T) {
 			ruleObjs += `{"vt":"str","v":"` + fmt.Sprint(i) + `"}`
 		}
 		ruleObjs += "]"
-		expr := `(function(){
-			const vm = ` + vm + `;
-			const nodeId = ` + fmt.Sprint(ids["sw"]) + `;
-			vm.openNodeProperties(nodeId);
-			vm.editingNodeSchema = null;
-			vm.editingNodeSchemaFields = [];
-			vm.editingNodeData = JSON.stringify({ rules: ` + ruleObjs +
-			`, otherwise: ` + fmt.Sprint(otherwise) + ` });
-			vm.saveNodeProperties();
-		})()`
-		require.NoError(t, eval(page, expr, nil))
+		expr := `(function(){ const vm = ` + vm + `; ` +
+			`const nodeId = ` + js(fmt.Sprint(ids["sw"])) + `; ` +
+			`try { vm.openNodeProperties(nodeId); } catch (e) { return 'open: '+e.stack; } ` +
+			`vm.editingNodeSchema = null; ` +
+			`vm.editingNodeSchemaFields = []; ` +
+			`vm.editingNodeData = JSON.stringify({ rules: ` + ruleObjs +
+			`, otherwise: ` + fmt.Sprint(otherwise) + ` }); ` +
+			`try { vm.saveNodeProperties(); } ` +
+			`catch (e) { return 'save failed: ' + (e && e.stack || e); } ` +
+			`return ''; })()`
+		var failure string
+		require.NoError(t, eval(page, expr, &failure))
+		require.Empty(t, failure)
 	}
 	portState := func() map[string]any {
 		var st map[string]any
 		require.NoError(t, eval(page, `(function(){
 			const vm = `+vm+`;
-			const sw = `+fmt.Sprint(ids["sw"])+`;
-			const dbg = `+fmt.Sprint(ids["dbg"])+`;
+			const sw = `+js(fmt.Sprint(ids["sw"]))+`;
+			const dbg = `+js(fmt.Sprint(ids["dbg"]))+`;
 			const node = vm.editor.getNodeFromId(sw);
 			const dbgNode = vm.editor.getNodeFromId(dbg);
 			return {
