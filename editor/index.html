@@ -487,6 +487,21 @@
             font-size: 0.8em;
             white-space: pre-wrap;
         }
+        /* format:"code" fields: vendored CodeMirror host + tab scaffold
+           (On Start / On Message / On Stop, Node-RED style). The tab
+           bar only appears when the schema has more than one code
+           field; the fallback textarea shows when the bundle failed
+           to load. */
+        .code-field-tabs { border-bottom: 0; }
+        .code-field-tabs .nav-link { padding: 0.25rem 0.75rem; font-size: 0.85rem; cursor: pointer; }
+        .code-editor-host .CodeMirror {
+            height: 300px;
+            border: 1px solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius);
+            font-family: var(--bs-font-monospace);
+            font-size: 0.85rem;
+        }
+        .code-editor-fallback { font-family: var(--bs-font-monospace); font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -1108,7 +1123,7 @@
 
     <!-- Node properties modal -->
     <div class="modal fade" id="nodePropsModal" tabindex="-1" ref="nodePropsModal">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered" :class="{ 'modal-lg': codeFields.length }">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit {{ editingNodeDisplayName }} Node</h5>
@@ -1131,7 +1146,8 @@
                     <template v-if="editingNodeSchema">
                         <div v-for="field in editingNodeSchemaFields" :key="field.key" class="mb-3"
                              v-show="schemaFieldVisible(field)">
-                            <label class="form-label">
+                            <label v-if="field.field !== 'code' || isFirstCodeField(field)"
+                                   class="form-label">
                                 {{ field.title }}
                                 <span v-if="field.required" class="text-danger">*</span>
                             </label>
@@ -1239,6 +1255,29 @@
                             <input v-else-if="field.field === 'number'" type="number" class="form-control"
                                    v-model="editingNodeForm[field.key]"
                                    :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            <!-- format:"code" — vendored CodeMirror with a
+                                 Node-RED-style tab scaffold: every code field
+                                 in the schema is one tab (On Start / On
+                                 Message / On Stop). The bar only shows with
+                                 more than one code field; the bound textarea
+                                 is the fallback when the bundle did not load. -->
+                            <div v-else-if="field.field === 'code'" class="code-field">
+                                <ul v-if="isFirstCodeField(field) && codeFields.length > 1"
+                                    class="nav nav-tabs code-field-tabs">
+                                    <li v-for="cf in codeFields" :key="cf.key" class="nav-item">
+                                        <a class="nav-link" :class="{ active: codeTabActive(cf) }"
+                                           @click.prevent="selectCodeTab(cf)">{{ cf.codeTabLabel || cf.title }}</a>
+                                    </li>
+                                </ul>
+                                <div v-show="codeTabActive(field)">
+                                    <div class="code-editor-host" :data-code-field="field.key"
+                                         v-show="codeEditorActive(field.key)"></div>
+                                    <textarea class="form-control code-editor-fallback" rows="10"
+                                              v-model="editingNodeForm[field.key]"
+                                              v-show="!codeEditorActive(field.key)"
+                                              :class="{ 'is-invalid': editingNodeFormErrors[field.key] }"></textarea>
+                                </div>
+                            </div>
                             <textarea v-else-if="field.field === 'textarea' || field.field === 'json'"
                                       class="form-control" rows="3"
                                       :class="{ 'font-monospace': field.field === 'json', 'is-invalid': editingNodeFormErrors[field.key] }"
@@ -1254,7 +1293,8 @@
                             <input v-else type="text" class="form-control"
                                    v-model="editingNodeForm[field.key]"
                                    :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
-                            <small v-if="field.description" class="form-text text-muted">{{ field.description }}</small>
+                            <small v-if="field.description && (field.field !== 'code' || codeTabActive(field))"
+                                   class="form-text text-muted">{{ field.description }}</small>
                             <div class="invalid-feedback">{{ editingNodeFormErrors[field.key] }}</div>
                         </div>
                     </template>
@@ -1602,6 +1642,12 @@
 <script src="https://cdn.jsdelivr.net/gh/dracory/floweditor@v0.9.0/dist/drawflow.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/components/navigation.js"></script>
+
+<!-- Vendored code editor (CodeMirror 5, served embedded — no CDN).
+     If this script fails to load, window.CodeMirror is absent and
+     code-format fields fall back to a plain textarea. -->
+<link href="/editor/codeeditor.css" rel="stylesheet">
+<script src="/editor/codeeditor.js"></script>
 
 <!-- Main Application -->
 <script src="/editor/editor_app.js"></script>

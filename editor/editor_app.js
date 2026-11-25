@@ -82,6 +82,15 @@ function initEditorApp() {
                 editingNodeSchemaFields: [], // normalized [{key, title, description, field, required, options}]
                 editingNodeForm: {}, // form values keyed by schema property name
                 editingNodeFormErrors: {},
+                // format:"code" fields: live CodeMirror instances keyed
+                // by field key ({} when the vendored bundle failed to
+                // load — the bound textarea fallback stays visible).
+                codeEditorInst: {},
+                codeEditorOk: {},
+                // Active tab within the code-field group (Node-RED
+                // On Start / On Message / On Stop) — '' picks the first
+                // code field in schema order.
+                codeActiveTab: '',
                 nodeTypeSearch: '',
                 // Palette grouping: collapsed state per category name,
                 // session-scoped (all groups start expanded — pick noted
@@ -395,6 +404,17 @@ function initEditorApp() {
                 const t = this.findType(this.editingNodeType);
                 const raw = (t && t.name) || this.editingNodeType || 'node';
                 return raw.replace(/\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1));
+            },
+
+            /**
+             * format:"code" fields in the current schema, in schema
+             * order — the code editor's tab list (Node-RED On Start /
+             * On Message / On Stop). One field means no tab bar.
+             */
+            codeFields() {
+                return this.editingNodeSchemaFields
+                    .filter(f => f.field === 'code')
+                    .sort((a, b) => (a.codeTabOrder || 0) - (b.codeTabOrder || 0));
             },
 
             /**
@@ -3025,6 +3045,9 @@ function initEditorApp() {
             schemaFieldType(prop) {
                 if (prop && (Array.isArray(prop.enum) || Array.isArray(prop.options))) return 'select';
                 if (prop && prop.format === 'typedinput') return 'typedinput';
+                // format:"code" — vendored CodeMirror editor with a
+                // textarea fallback when the bundle did not load.
+                if (prop && prop.format === 'code') return 'code';
                 if (prop && prop.type === 'array' && prop.items && prop.items.properties) return 'items';
                 switch (prop && prop.type) {
                     case 'boolean': return 'checkbox';
@@ -3201,7 +3224,14 @@ function initEditorApp() {
                         // {otherKey: expectedValue, ...} — the field is
                         // shown only when every listed form value equals
                         // its expected value (e.g. {backend: 'dir'}).
-                        showIf: prop.showIf || prop['visible-when'] || null
+                        showIf: prop.showIf || prop['visible-when'] || null,
+                        // format:"code" tab metadata — codeTab overrides
+                        // the title for the tab strip (Node-RED "On
+                        // Message" style short names); codeTabOrder
+                        // sorts tabs (schema key order is alphabetical
+                        // through the API, so order must be explicit).
+                        codeTabLabel: prop.codeTab || null,
+                        codeTabOrder: prop.codeTabOrder || 0
                     });
                     form[key] = value;
                 });
@@ -3258,6 +3288,82 @@ function initEditorApp() {
                     String(this.editingNodeForm[k]) === String(field.showIf[k]));
             },
 
+            /**
+             * format:"code" tab helpers — every code field in the
+             * schema is one tab of a single group (Node-RED On Start /
+             * On Message / On Stop). Fields after the first render no
+             * label; inactive tabs collapse to nothing.
+             */
+            isFirstCodeField(field) {
+                // The tab bar + label anchor on the first code field in
+                // ROW order (not tab order) so the bar always sits above
+                // whichever field's editor is showing.
+                const first = this.editingNodeSchemaFields.find(f => f.field === 'code');
+                return !!first && first.key === field.key;
+            },
+            codeTabActive(field) {
+                const cf = this.codeFields;
+                if (!cf.length) return false;
+                // No explicit selection yet: open on the required code
+                // field (the function body — Node-RED's "On Message"),
+                // else the first tab.
+                const first = cf.find(f => f.required) || cf[0];
+                const active = this.codeActiveTab || first.key;
+                return active === field.key;
+            },
+            selectCodeTab(field) {
+                this.codeActiveTab = field.key;
+                // An editor created while its tab was hidden has a zero
+                // size — refresh forces a re-measure on first show.
+                this.$nextTick(() => {
+                    const cm = this.codeEditorInst[field.key];
+                    if (cm) cm.refresh();
+                });
+            },
+            codeEditorActive(key) {
+                return !!this.codeEditorOk[key];
+            },
+
+            /**
+             * Create a CodeMirror per code-format field once the schema
+             * form has rendered. Skips entirely when the vendored
+             * bundle failed to load (window.CodeMirror absent) — the
+             * bound textarea fallback stays visible and the value still
+             * round-trips through editingNodeForm.
+             */
+            initCodeEditors() {
+                if (typeof CodeMirror === 'undefined') return;
+                this.$nextTick(() => {
+                    const modal = this.$refs.nodePropsModal;
+                    if (!modal) return;
+                    const hosts = modal.querySelectorAll('.code-editor-host');
+                    hosts.forEach(el => {
+                        const key = el.getAttribute('data-code-field');
+                        if (!key || this.codeEditorInst[key]) return;
+                        try {
+                            const cm = CodeMirror(el, {
+                                value: this.editingNodeForm[key] || '',
+                                mode: 'javascript',
+                                lineNumbers: true,
+                                indentUnit: 4,
+                                tabSize: 4,
+                                indentWithTabs: false
+                            });
+                            cm.setSize('100%', 300);
+                            cm.on('change', () => {
+                                this.editingNodeForm[key] = cm.getValue();
+                            });
+                            this.codeEditorInst[key] = cm;
+                            this.codeEditorOk[key] = true;
+                            cm.refresh();
+                        } catch (e) {
+                            // Any bundle/mode failure keeps the textarea
+                            // fallback — nothing else to do.
+                        }
+                    });
+                });
+            },
+
             openNodeProperties(nodeId) {
                 const node = this.editor.getNodeFromId(nodeId);
                 if (!node) return;
@@ -3271,6 +3377,12 @@ function initEditorApp() {
                 this.editingNodeSchemaFields = [];
                 this.editingNodeForm = {};
                 this.editingNodeFormErrors = {};
+                // Drop stale code-editor state — the modal DOM is
+                // re-rendered per open, so old CodeMirror wrappers are
+                // gone with their host divs.
+                this.codeEditorInst = {};
+                this.codeEditorOk = {};
+                this.codeActiveTab = '';
                 bootstrap.Modal.getOrCreateInstance(this.$refs.nodePropsModal).show();
 
                 // Try to fetch a JSON schema to drive a generated form;
@@ -3282,6 +3394,7 @@ function initEditorApp() {
                         const built = this.buildSchemaFields(data.schema, node.data || {});
                         this.editingNodeSchemaFields = built.fields;
                         this.editingNodeForm = built.form;
+                        this.initCodeEditors();
                     })
                     .catch(() => { /* keep JSON fallback */ });
             },
@@ -3292,6 +3405,13 @@ function initEditorApp() {
             saveNodeProperties() {
                 let data;
                 if (this.editingNodeSchema) {
+                    // Flush live CodeMirror buffers into the form before
+                    // collecting — the change listener already syncs,
+                    // but a read here makes the round-trip independent
+                    // of event timing.
+                    Object.keys(this.codeEditorInst).forEach(k => {
+                        this.editingNodeForm[k] = this.codeEditorInst[k].getValue();
+                    });
                     const errors = {};
                     data = {};
                     // Preserve non-schema keys already on the node

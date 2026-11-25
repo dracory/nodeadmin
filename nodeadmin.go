@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/dracory/nodeadmin/api"
 	dashpage "github.com/dracory/nodeadmin/dashboard"
@@ -54,6 +55,17 @@ type Options struct {
 	// When empty, credentials are read from the config store key
 	// "admin.auth" (interim source; the creds entity lands in P4).
 	AuthFile string
+
+	// SeedAdminUser and SeedAdminPassword pre-provision the first
+	// admin user from the environment (Grafana model): when both are
+	// set and no credentials resolve from AuthFile or the config
+	// store, the admin user is created at first boot and first-run
+	// setup is skipped. They are evaluated only while no users exist
+	// — once credentials are stored the values are ignored, so the
+	// environment can rotate or drop them safely. Both must be set
+	// together; a lone value is ignored.
+	SeedAdminUser     string
+	SeedAdminPassword string
 
 	// AdminHomeURL is the URL unauthenticated requests are redirected
 	// to (default: "/").
@@ -99,17 +111,28 @@ type Interface interface {
 	// Routes registered through it serve on this handler, behind the
 	// same auth middleware.
 	HTTPRouter() nodebase.HTTPRouter
+	// SetupRequired reports whether the admin is in first-run setup
+	// mode — no credentials resolved from any source, so all routes
+	// redirect to the token-gated wizard. The host uses this after
+	// New to log accurate startup guidance.
+	SetupRequired() bool
 }
 
 // admin implements Interface
 type admin struct {
 	opts      Options
-	users     []authUser
 	handler   http.Handler
 	endpoints *endpointRouter
 	settings  *settings.Section
 	dashboard *dashboard.Hub // nil unless the engine is a noderunner host
 	routes    map[string]func(w http.ResponseWriter, r *http.Request)
+
+	// mu guards users and setupMode — the wizard flips both live on
+	// completion while requests read them concurrently.
+	mu         sync.RWMutex
+	users      []authUser
+	setupMode  bool
+	setupToken string
 }
 
 // New creates a new node admin instance.
@@ -208,22 +231,47 @@ func New(opts Options) (Interface, error) {
 
 	a := &admin{opts: opts}
 
-	// Admin credentials: the AuthFile wins; when unset, the interim
-	// source is the config store key "admin.auth" (authFile JSON
-	// shape — the creds entity lands in P4). No users = open admin,
-	// same contract as flowadmin.
-	if opts.AuthFile != "" {
-		users, err := loadAuthFile(opts.AuthFile)
-		if err != nil {
-			return nil, err
+	// Admin credentials resolve in order: AuthFile users → seeded
+	// admin (evaluated only while no users exist) → the config store
+	// key "admin.auth" (interim shape — the creds entity lands in P4)
+	// → first-run setup mode. When a host AuthUserID is wired the
+	// host owns auth and none of this applies.
+	if opts.AuthUserID == nil {
+		switch {
+		case opts.AuthFile != "":
+			users, err := loadAuthFile(opts.AuthFile)
+			if err != nil {
+				return nil, err
+			}
+			a.users = users
+		default:
+			users, err := loadAuthConfig(context.Background(), opts.Store)
+			if err != nil {
+				return nil, err
+			}
+			if len(users) == 0 && opts.SeedAdminUser != "" && opts.SeedAdminPassword != "" {
+				hash, herr := HashPassword(opts.SeedAdminPassword)
+				if herr != nil {
+					return nil, herr
+				}
+				if werr := writeAdminCredentials(context.Background(), opts.Store, opts.SeedAdminUser, hash); werr != nil {
+					return nil, werr
+				}
+				log.Printf("nodeadmin: seeded initial admin user %q from the environment", opts.SeedAdminUser)
+				users = []authUser{{Username: opts.SeedAdminUser, Password: hash}}
+			}
+			a.users = users
+			if len(a.users) == 0 {
+				token, terr := ensureSetupToken(context.Background(), opts.Store)
+				if terr != nil {
+					return nil, terr
+				}
+				a.setupMode = true
+				a.setupToken = token
+				log.Printf("nodeadmin: first-run setup required — the admin redirects to the setup wizard")
+				log.Printf("nodeadmin: setup token: %s", token)
+			}
 		}
-		a.users = users
-	} else {
-		users, err := loadAuthConfig(context.Background(), opts.Store)
-		if err != nil {
-			return nil, err
-		}
-		a.users = users
 	}
 
 	// Install the shared-listener adapter BEFORE ResumeDeployed
@@ -288,13 +336,25 @@ func New(opts Options) (Interface, error) {
 // when credentials are configured (AuthFile or config store), HTTP
 // Basic auth is enforced.
 func (a *admin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// First-run setup mode gates EVERYTHING — admin routes redirect
+	// to the wizard and shared-listener node routes stay behind it
+	// (an open listener would be an open admin surface).
+	a.mu.RLock()
+	setup := a.setupMode
+	users := a.users
+	a.mu.RUnlock()
+	if setup {
+		a.serveSetup(w, r)
+		return
+	}
+
 	if a.opts.AuthUserID != nil {
 		if a.opts.AuthUserID(r) == "" {
 			http.Redirect(w, r, a.opts.AdminHomeURL, http.StatusSeeOther)
 			return
 		}
-	} else if len(a.users) > 0 {
-		if _, ok := basicAuthUser(r, a.users); !ok {
+	} else if len(users) > 0 {
+		if _, ok := basicAuthUser(r, users); !ok {
 			requireAuth(w)
 			return
 		}
@@ -312,6 +372,14 @@ func (a *admin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // HTTPRouter returns the shared-listener adapter (see Interface).
 func (a *admin) HTTPRouter() nodebase.HTTPRouter {
 	return a.endpoints
+}
+
+// SetupRequired reports whether first-run setup is active (see
+// Interface).
+func (a *admin) SetupRequired() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.setupMode
 }
 
 // Handle is the single admin-surface entry point: config values are
