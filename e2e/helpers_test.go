@@ -155,11 +155,14 @@ func apiPost(t *testing.T, base, path string, body any) map[string]any {
 	return envelope.Data
 }
 
-// browser wraps a chromedp browser context. Pages (tabs) are created
-// from browserCtx with chromedp.NewContext; allocatorCancel shuts the
-// browser down (kills the child process for the exec allocator).
+// browser wraps a chromedp browser driving ONE tab for the whole
+// suite. A single CDP session keeps the message pipeline simple —
+// multiplexing a second session over the same remote-debugging socket
+// proved flaky on this setup (responses stopped being routed mid-run).
+// allocatorCancel shuts everything down.
 type browser struct {
-	browserCtx      context.Context
+	tabCtx          context.Context
+	watcher         *consoleWatcher
 	allocatorCancel context.CancelFunc
 }
 
@@ -254,10 +257,11 @@ func newLocalBrowser(t *testing.T, bin string) *browser {
 	)
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
-	browserCtx, _ := chromedp.NewContext(allocCtx)
-	// The first Run on the browser context spawns the process.
-	require.NoError(t, chromedp.Run(browserCtx))
-	return &browser{browserCtx: browserCtx, allocatorCancel: cancelAlloc}
+	tabCtx, _ := chromedp.NewContext(allocCtx)
+	// The first Run on the context spawns the process and attaches the
+	// suite's single tab.
+	require.NoError(t, chromedp.Run(tabCtx, runtime.Enable()))
+	return &browser{tabCtx: tabCtx, watcher: watchConsole(tabCtx), allocatorCancel: cancelAlloc}
 }
 
 // newWindowsBrowser spawns a Windows Chromium-family browser (Edge or
@@ -327,11 +331,11 @@ func newWindowsBrowser(t *testing.T, bin string) *browser {
 	require.NotEmpty(t, wsURL, "browser devtools endpoint never came up")
 
 	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(context.Background(), wsURL)
-	browserCtx, _ := chromedp.NewContext(allocCtx,
-		chromedp.WithBrowserOption(chromedp.WithBrowserDebugf(
-			func(s string, a ...any) { fmt.Printf("CDP "+s+"\n", a...) })))
-	require.NoError(t, chromedp.Run(browserCtx))
-	return &browser{browserCtx: browserCtx, allocatorCancel: cancelAlloc}
+	tabCtx, _ := chromedp.NewContext(allocCtx)
+	// Attaches to the browser's first tab (the about:blank the binary
+	// was spawned with).
+	require.NoError(t, chromedp.Run(tabCtx, runtime.Enable()))
+	return &browser{tabCtx: tabCtx, watcher: watchConsole(tabCtx), allocatorCancel: cancelAlloc}
 }
 
 // windowsPath converts dir to a Windows path the browser binary
@@ -377,6 +381,14 @@ func (w *consoleWatcher) errors() []string {
 	return out
 }
 
+// reset clears collected errors — called per page so each test sees
+// only its own console output on the shared tab.
+func (w *consoleWatcher) reset() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.errs = nil
+}
+
 // watchConsole registers a chromedp target listener on ctx. It must be
 // called before the first chromedp.Run on ctx so no early console
 // events are missed.
@@ -413,8 +425,14 @@ func js(s string) string {
 }
 
 // eval evaluates a JS expression in the page and returns its value.
+// The ctx is wrapped in a 45s bound: Runtime.evaluate replies only
+// once the renderer's main thread is free, which — while CDN scripts
+// are still parsing — can take tens of seconds on this setup; without
+// a bound a reply that never comes wedges the test forever.
 func eval(ctx context.Context, expr string, out any) error {
-	return chromedp.Run(ctx, chromedp.Evaluate(expr, out))
+	ec, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	return chromedp.Run(ec, chromedp.Evaluate(expr, out))
 }
 
 func evalBool(t *testing.T, ctx context.Context, expr string) bool {
@@ -431,7 +449,7 @@ func evalBool(t *testing.T, ctx context.Context, expr string) bool {
 // like.
 func waitElement(t *testing.T, ctx context.Context, sel string) {
 	t.Helper()
-	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := chromedp.Run(cctx, chromedp.WaitVisible(sel, chromedp.ByQuery)); err != nil {
 		var html string
@@ -479,7 +497,7 @@ func clickText(t *testing.T, ctx context.Context, sel, text string) {
 	t.Helper()
 	expr := `[...document.querySelectorAll(` + js(sel) + `)]` +
 		`.find(e => (e.innerText||'').trim().toLowerCase() === ` + js(strings.ToLower(text)) + `)`
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(45 * time.Second)
 	for {
 		if evalBool(t, ctx, `!!(`+expr+`)`) {
 			require.NoError(t, eval(ctx, `(`+expr+`)?.click()`, nil))
@@ -527,17 +545,16 @@ func elementsLen(t *testing.T, ctx context.Context, sel string) int {
 	return n
 }
 
-// mustPage opens a fresh tab at url with a console watcher attached
-// before navigation. ctx is the tab context for all further actions.
+// mustPage navigates the suite's shared tab to url and resets the
+// console watcher so each page gets a clean error list. The returned
+// ctx is the shared tab context for all further actions.
 func mustPage(t *testing.T, b *browser, url string) (context.Context, *consoleWatcher) {
 	t.Helper()
-	tabCtx, cancel := chromedp.NewContext(b.browserCtx)
-	t.Cleanup(cancel)
-	w := watchConsole(tabCtx)
-	runCtx, runCancel := context.WithTimeout(tabCtx, 60*time.Second)
+	b.watcher.reset()
+	runCtx, runCancel := context.WithTimeout(b.tabCtx, 120*time.Second)
 	defer runCancel()
-	require.NoError(t, chromedp.Run(runCtx, runtime.Enable(), chromedp.Navigate(url)))
-	return tabCtx, w
+	require.NoError(t, chromedp.Run(runCtx, chromedp.Navigate(url)))
+	return b.tabCtx, b.watcher
 }
 
 // waitVueApp waits until the CDN globals the Vue pages need are
@@ -552,12 +569,9 @@ func waitVueApp(t *testing.T, ctx context.Context) {
 		`!!document.querySelector('#app[data-v-app]')`
 	for attempt := 0; attempt < 3; attempt++ {
 		ready := false
-		deadline := time.Now().Add(15 * time.Second)
+		deadline := time.Now().Add(45 * time.Second)
 		for time.Now().Before(deadline) {
-			ec, ecancel := context.WithTimeout(ctx, 10*time.Second)
-			ok := evalBool(t, ec, expr)
-			ecancel()
-			if ok {
+			if evalBool(t, ctx, expr) {
 				ready = true
 				break
 			}
@@ -568,7 +582,7 @@ func waitVueApp(t *testing.T, ctx context.Context) {
 		}
 		// Reload has no internal timeout — bound it so a stalled
 		// load can't wedge the whole suite.
-		rc, rcancel := context.WithTimeout(ctx, 20*time.Second)
+		rc, rcancel := context.WithTimeout(ctx, 60*time.Second)
 		if err := chromedp.Run(rc, chromedp.Reload()); err != nil {
 			t.Logf("waitVueApp reload: %v", err)
 		}
