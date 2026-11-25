@@ -35,12 +35,12 @@ func initTestAdmin(t *testing.T) Interface {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// AuthUserID stands in for host-owned auth: with no credentials
-	// configured a bare admin is in first-run setup mode, which would
-	// redirect every route these tests exercise.
+	// IsAccessAllowed stands in for host-owned auth — the library
+	// holds no users; the host callback answers the one question.
 	admin, err := New(Options{
-		Store:      store,
-		AuthUserID: func(r *http.Request) string { return "test-user" },
+		Store:           store,
+		IsAccessAllowed: func(r *http.Request) bool { return true },
+		GetAuthUserID:   func(r *http.Request) string { return "test-user" },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -102,19 +102,41 @@ func TestApiRejectsNonJSONPost(t *testing.T) {
 	}
 }
 
-func TestAuthRedirect(t *testing.T) {
-	store := initTestAdmin(t)
-	_ = store
-	db, _ := sql.Open("sqlite", ":memory:")
-	db.SetMaxOpenConns(1) // :memory: databases are per-connection
-	entityStore, _ := entitystore.NewStore(entitystore.NewStoreOptions{
-		DB: db, EntityTableName: "e", AttributeTableName: "a", AutomigrateEnabled: true,
+// newTestStore builds an in-memory nodestore for gate tests.
+func newTestStore(t *testing.T) nodestore.StoreInterface {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	entityStore, err := entitystore.NewStore(entitystore.NewStoreOptions{
+		DB:                 db,
+		EntityTableName:    "entity",
+		AttributeTableName: "attribute",
+		AutomigrateEnabled: true,
 	})
-	ns, _ := nodestore.NewStore(nodestore.NewStoreOptions{EntityStore: entityStore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := nodestore.NewStore(nodestore.NewStoreOptions{EntityStore: entityStore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return store
+}
+
+// TestIsAccessAllowedGate: denied requests get OnUnauthorized when
+// wired (host redirect), the default 401 when it is not.
+func TestIsAccessAllowedGate(t *testing.T) {
+	store := newTestStore(t)
 	admin, err := New(Options{
-		Store:        ns,
-		AuthUserID:   func(r *http.Request) string { return "" },
-		AdminHomeURL: "/login",
+		Store:           store,
+		IsAccessAllowed: func(r *http.Request) bool { return false },
+		OnUnauthorized: func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -123,5 +145,32 @@ func TestAuthRedirect(t *testing.T) {
 	admin.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
 		t.Fatal("expected redirect to /login")
+	}
+
+	admin2, err := New(Options{
+		Store:           newTestStore(t),
+		IsAccessAllowed: func(r *http.Request) bool { return false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	admin2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("default denial must be a plain 401, got %d", rec.Code)
+	}
+}
+
+// TestOpenWhenNoAuth: nil IsAccessAllowed means open — the standalone
+// host simply wires nothing.
+func TestOpenWhenNoAuth(t *testing.T) {
+	admin, err := New(Options{Store: newTestStore(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	admin.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("no IsAccessAllowed must be open, got %d", rec.Code)
 	}
 }

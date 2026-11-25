@@ -20,7 +20,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/dracory/nodeadmin/api"
 	dashpage "github.com/dracory/nodeadmin/dashboard"
@@ -43,33 +42,26 @@ type Options struct {
 	// (required).
 	Store nodestore.StoreInterface
 
-	// AuthUserID returns the authenticated user ID for the request.
-	// If set and it returns "", the request is redirected to
-	// AdminHomeURL. If nil, authentication falls back to the basic-auth
-	// credentials (AuthFile, then the config store).
-	AuthUserID func(r *http.Request) string
+	// IsAccessAllowed reports whether the request may use the admin.
+	// Authentication is host-owned (GOD ruling 2026-11-25): sessions,
+	// login, users and roles all live outside this package — it only
+	// asks this one question per request. Nil means open (standalone
+	// or dev mode).
+	IsAccessAllowed func(r *http.Request) bool
 
-	// AuthFile is the path to a Node-RED adminAuth-style JSON
-	// credentials file ({"users":[{"username","password(bcrypt)"}]}).
-	// When set and AuthUserID is nil, HTTP Basic auth is enforced —
-	// the same file-based protection Node-RED's adminAuth provides.
-	// When empty, credentials are read from the config store key
-	// "admin.auth" (interim source; the creds entity lands in P4).
-	AuthFile string
+	// OnUnauthorized writes the response for a request IsAccessAllowed
+	// denied — the host decides: a redirect to its login page, a JSON
+	// 401 for API clients, etc. Nil replies "authentication required"
+	// with status 401.
+	OnUnauthorized func(w http.ResponseWriter, r *http.Request)
 
-	// SeedAdminUser and SeedAdminPassword pre-provision the first
-	// admin user from the environment (Grafana model): when both are
-	// set and no credentials resolve from AuthFile or the config
-	// store, the admin user is created at first boot and first-run
-	// setup is skipped. They are evaluated only while no users exist
-	// — once credentials are stored the values are ignored, so the
-	// environment can rotate or drop them safely. Both must be set
-	// together; a lone value is ignored.
-	SeedAdminUser     string
-	SeedAdminPassword string
+	// GetAuthUserID returns the authenticated user's ID for display
+	// and audit purposes only — it is never consulted for the access
+	// decision. Optional.
+	GetAuthUserID func(r *http.Request) string
 
-	// AdminHomeURL is the URL unauthenticated requests are redirected
-	// to (default: "/").
+	// AdminHomeURL is the admin home link exposed to sections through
+	// the request context (default: "/").
 	AdminHomeURL string
 
 	// NodeAdminURL is the base URL the node admin is mounted on —
@@ -110,13 +102,8 @@ type Interface interface {
 	// HTTPRouter returns the shared-listener adapter mounted on this
 	// handler — the nodebase.HTTPRouter the engine is wired with at New.
 	// Routes registered through it serve on this handler, behind the
-	// same auth middleware.
+	// same access check.
 	HTTPRouter() nodebase.HTTPRouter
-	// SetupRequired reports whether the admin is in first-run setup
-	// mode — no credentials resolved from any source, so all routes
-	// redirect to the token-gated wizard. The host uses this after
-	// New to log accurate startup guidance.
-	SetupRequired() bool
 }
 
 // admin implements Interface
@@ -127,13 +114,6 @@ type admin struct {
 	settings  *settings.Section
 	dashboard *dashboard.Hub // nil unless the engine is a noderunner host
 	routes    map[string]func(w http.ResponseWriter, r *http.Request)
-
-	// mu guards users and setupMode — the wizard flips both live on
-	// completion while requests read them concurrently.
-	mu         sync.RWMutex
-	users      []authUser
-	setupMode  bool
-	setupToken string
 }
 
 // New creates a new node admin instance.
@@ -232,49 +212,6 @@ func New(opts Options) (Interface, error) {
 
 	a := &admin{opts: opts}
 
-	// Admin credentials resolve in order: AuthFile users → seeded
-	// admin (evaluated only while no users exist) → the config store
-	// key "admin.auth" (interim shape — the creds entity lands in P4)
-	// → first-run setup mode. When a host AuthUserID is wired the
-	// host owns auth and none of this applies.
-	if opts.AuthUserID == nil {
-		switch {
-		case opts.AuthFile != "":
-			users, err := loadAuthFile(opts.AuthFile)
-			if err != nil {
-				return nil, err
-			}
-			a.users = users
-		default:
-			users, err := loadAuthConfig(context.Background(), opts.Store)
-			if err != nil {
-				return nil, err
-			}
-			if len(users) == 0 && opts.SeedAdminUser != "" && opts.SeedAdminPassword != "" {
-				hash, herr := HashPassword(opts.SeedAdminPassword)
-				if herr != nil {
-					return nil, herr
-				}
-				if werr := writeAdminCredentials(context.Background(), opts.Store, opts.SeedAdminUser, hash); werr != nil {
-					return nil, werr
-				}
-				log.Printf("nodeadmin: seeded initial admin user %q from the environment", opts.SeedAdminUser)
-				users = []authUser{{Username: opts.SeedAdminUser, Password: hash}}
-			}
-			a.users = users
-			if len(a.users) == 0 {
-				token, terr := ensureSetupToken(context.Background(), opts.Store)
-				if terr != nil {
-					return nil, terr
-				}
-				a.setupMode = true
-				a.setupToken = token
-				log.Printf("nodeadmin: first-run setup required — the admin redirects to the setup wizard")
-				log.Printf("nodeadmin: setup token: %s", token)
-			}
-		}
-	}
-
 	// Install the shared-listener adapter BEFORE ResumeDeployed
 	// launches below — the resume goroutine can deploy httpTrigger
 	// "main" listeners immediately and must not see a nil router.
@@ -283,10 +220,23 @@ func New(opts Options) (Interface, error) {
 	a.endpoints = newEndpointRouter()
 	if engine, ok := opts.Engine.(*noderunner.WorkflowEngine); ok {
 		engine.HTTPRouter = a.endpoints
-		if len(a.users) > 0 {
-			users := a.users
+		// Node-served listeners authenticate through the same host
+		// seam as the admin surface — nodeadmin owns no credentials.
+		switch {
+		case opts.IsAccessAllowed != nil:
 			engine.HTTPAuthenticator = func(r *http.Request) (string, bool) {
-				return basicAuthUser(r, users)
+				if !opts.IsAccessAllowed(r) {
+					return "", false
+				}
+				if opts.GetAuthUserID != nil {
+					return opts.GetAuthUserID(r), true
+				}
+				return "", true
+			}
+		case opts.GetAuthUserID != nil:
+			engine.HTTPAuthenticator = func(r *http.Request) (string, bool) {
+				userID := opts.GetAuthUserID(r)
+				return userID, userID != ""
 			}
 		}
 		// Dashboard runtime bridge (task dashboard_hub_nodes):
@@ -307,7 +257,7 @@ func New(opts Options) (Interface, error) {
 	// over the single section instance.
 	a.settings = settings.New(opts.Engine, opts.Store)
 	a.settings.SetServerInfo(map[string]any{
-		"authEnabled": opts.AuthUserID != nil || len(a.users) > 0,
+		"authEnabled": opts.IsAccessAllowed != nil,
 	})
 
 	a.routes = a.buildRoutes()
@@ -332,33 +282,17 @@ func New(opts Options) (Interface, error) {
 	return a, nil
 }
 
-// ServeHTTP implements http.Handler. When AuthUserID is configured,
-// unauthenticated requests are redirected to AdminHomeURL. Otherwise,
-// when credentials are configured (AuthFile or config store), HTTP
-// Basic auth is enforced.
+// ServeHTTP implements http.Handler. Access is host-owned: when
+// IsAccessAllowed is wired it is the only check — the response for a
+// denied request is OnUnauthorized (default: plain 401).
 func (a *admin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// First-run setup mode gates EVERYTHING — admin routes redirect
-	// to the wizard and shared-listener node routes stay behind it
-	// (an open listener would be an open admin surface).
-	a.mu.RLock()
-	setup := a.setupMode
-	users := a.users
-	a.mu.RUnlock()
-	if setup {
-		a.serveSetup(w, r)
+	if a.opts.IsAccessAllowed != nil && !a.opts.IsAccessAllowed(r) {
+		if a.opts.OnUnauthorized != nil {
+			a.opts.OnUnauthorized(w, r)
+		} else {
+			http.Error(w, "authentication required", http.StatusUnauthorized)
+		}
 		return
-	}
-
-	if a.opts.AuthUserID != nil {
-		if a.opts.AuthUserID(r) == "" {
-			http.Redirect(w, r, a.opts.AdminHomeURL, http.StatusSeeOther)
-			return
-		}
-	} else if len(users) > 0 {
-		if _, ok := basicAuthUser(r, users); !ok {
-			requireAuth(w)
-			return
-		}
 	}
 
 	// Shared-listener node routes (listener "main") are checked
@@ -373,14 +307,6 @@ func (a *admin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // HTTPRouter returns the shared-listener adapter (see Interface).
 func (a *admin) HTTPRouter() nodebase.HTTPRouter {
 	return a.endpoints
-}
-
-// SetupRequired reports whether first-run setup is active (see
-// Interface).
-func (a *admin) SetupRequired() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.setupMode
 }
 
 // Handle is the single admin-surface entry point: config values are

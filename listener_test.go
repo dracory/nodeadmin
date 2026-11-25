@@ -89,8 +89,15 @@ func TestTriggerRoundtrip(t *testing.T) {
 // endpoints (parity with flowadmin).
 func TestTriggerBehindAuth(t *testing.T) {
 	store := newTestStore(t)
-	authFile := writeAuthFile(t, "s3cret")
-	admin, err := New(Options{Store: store, AuthFile: authFile})
+	// Host-supplied gate: any scheme the host likes — this test's
+	// stand-in checks Basic credentials it defines itself.
+	admin, err := New(Options{
+		Store: store,
+		IsAccessAllowed: func(r *http.Request) bool {
+			u, p, ok := r.BasicAuth()
+			return ok && u == "admin" && p == "s3cret"
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

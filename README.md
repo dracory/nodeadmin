@@ -8,17 +8,29 @@ the dracory admin-module pattern (like taskadmin/shopadmin).
 
 ```go
 handler, err := nodeadmin.New(nodeadmin.Options{
-    Store:        store,              // nodestore.StoreInterface (required)
-    AuthUserID:   authUserIDFunc,     // optional; "" redirects to AdminHomeURL
-    AdminHomeURL: "/",
-    NodeAdminURL: "/nodes",           // mount point used for link building
-    FuncLayout:   myLayout,           // optional outer chrome
+    Store:            store,            // nodestore.StoreInterface (required)
+    IsAccessAllowed:  isAllowed,       // optional; nil = open. Host-owned auth.
+    OnUnauthorized:   onDenied,        // optional denied-response writer
+    GetAuthUserID:    authUserIDFunc,  // optional identity for display/audit
+    AdminHomeURL:     "/",
+    NodeAdminURL:     "/nodes",        // mount point used for link building
+    FuncLayout:       myLayout,        // optional outer chrome
 })
 mux.Handle("/nodes/", http.StripPrefix("/nodes", handler))
 ```
 
 `New` returns an `Interface` (a plain `http.Handler`) mountable on any
 router — ServeMux, chi, gin, echo.
+
+## Auth
+
+Auth is host-owned: the library stores no users and verifies no
+credentials. `IsAccessAllowed(r)` is the only gate — wire it to your
+session middleware, SSO, or a Basic-auth adapter. `OnUnauthorized(w, r)`
+writes the denied response (redirect to your login, JSON 401, …);
+default is a plain 401. `GetAuthUserID(r)` supplies an identity string
+for display/audit only. The same seam protects node-served HTTP
+listeners (listener "main") via the engine's `HTTPAuthenticator`.
 
 ## Structure
 
