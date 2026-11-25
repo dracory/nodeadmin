@@ -22,9 +22,16 @@ func deployTriggerFlow(t *testing.T, admin Interface, store nodestore.StoreInter
 			"path":     path,
 			"listener": "main",
 		}),
+		// GET payloads carry the query object (Node-RED parity), so a
+		// function node surfaces msg.req — params included — as the
+		// response body for the roundtrip assertion.
+		nodestore.NewNode("echo", "function").SetData(map[string]interface{}{
+			"func": "msg.payload = msg.req; return msg;",
+		}),
 		nodestore.NewNode("resp", "httpResponse").SetData(map[string]interface{}{}),
 	}).SetEdges([]nodestore.EdgeInterface{
-		nodestore.NewEdge("e1", "trig", "resp"),
+		nodestore.NewEdge("e1", "trig", "echo"),
+		nodestore.NewEdge("e2", "echo", "resp"),
 	})
 	if err := store.WorkflowCreate(context.Background(), wf); err != nil {
 		t.Fatalf("workflow create: %v", err)

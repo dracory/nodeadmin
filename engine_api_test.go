@@ -49,7 +49,13 @@ func newEngineTestAdmin(t *testing.T) (Interface, *noderunner.WorkflowEngine, no
 		t.Fatal(err)
 	}
 	engine := noderunner.NewWorkflowEngine()
-	admin, err := New(Options{Store: store, Engine: engine})
+	// AuthUserID keeps the surface open — a bare admin with no
+	// credentials resolves to first-run setup mode and redirects.
+	admin, err := New(Options{
+		Store:      store,
+		Engine:     engine,
+		AuthUserID: func(r *http.Request) string { return "test-user" },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,7 +35,13 @@ func initTestAdmin(t *testing.T) Interface {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := New(Options{Store: store})
+	// AuthUserID stands in for host-owned auth: with no credentials
+	// configured a bare admin is in first-run setup mode, which would
+	// redirect every route these tests exercise.
+	admin, err := New(Options{
+		Store:      store,
+		AuthUserID: func(r *http.Request) string { return "test-user" },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
