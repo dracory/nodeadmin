@@ -13,8 +13,8 @@ import (
 	"github.com/dracory/entitystore"
 	_ "modernc.org/sqlite"
 
-	"github.com/dracory/nodestore"
 	"github.com/dracory/noderun"
+	"github.com/dracory/nodestore"
 )
 
 // Endpoint-level tests proving the engine-bound API endpoints are wired
