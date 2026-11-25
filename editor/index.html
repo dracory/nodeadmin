@@ -1188,6 +1188,7 @@
                                      class="d-flex align-items-center gap-1 mb-2 pb-2 border-bottom">
                                     <div class="flex-grow-1 d-flex flex-wrap align-items-center gap-1">
                                         <template v-for="sf in field.itemFields" :key="sf.key">
+                                        <template v-if="itemFieldVisible(sf, row)">
                                             <!-- typedInput: type dropdown + value input
                                                  (writes the sibling typeField on the row) -->
                                             <div v-if="sf.field === 'typedinput'" class="input-group input-group-sm"
@@ -1215,6 +1216,7 @@
                                             <input v-else type="text" class="form-control form-control-sm flex-fill"
                                                    style="min-width: 80px; max-width: 220px;" :placeholder="sf.title"
                                                    v-model="row[sf.key]" :title="sf.description || sf.title">
+                                        </template>
                                         </template>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-outline-secondary px-1"

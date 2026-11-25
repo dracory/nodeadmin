@@ -3109,8 +3109,29 @@ function initEditorApp() {
                     types: (sub && sub.typedInputTypes) || ['msg', 'str', 'num', 'bool', 'json'],
                     default: sub && sub.default,
                     defaultType: (sub && sub.defaultType)
-                        || (sub && sub.typedInputTypes && sub.typedInputTypes[0]) || 'str'
+                        || (sub && sub.typedInputTypes && sub.typedInputTypes[0]) || 'str',
+                    // Per-row visibility: {key: rowKey, in: [values]} —
+                    // showWhen shows the sub-field only when the row's
+                    // key value is in the list, hideWhen hides it then
+                    // (switch rules hide the value for value-less ops).
+                    showWhen: (sub && sub.showWhen) || null,
+                    hideWhen: (sub && sub.hideWhen) || null
                 };
+            },
+
+            /**
+             * Sub-field visibility inside an "items" row: evaluates the
+             * showWhen/hideWhen {key, in: [...]} clause against the
+             * row's own values (compared as strings).
+             */
+            itemFieldVisible(sf, row) {
+                if (!sf || !row) return true;
+                const match = (clause) => clause && clause.key &&
+                    Array.isArray(clause.in) &&
+                    clause.in.map(String).indexOf(String(row[clause.key])) !== -1;
+                if (sf.showWhen && !match(sf.showWhen)) return false;
+                if (sf.hideWhen && match(sf.hideWhen)) return false;
+                return true;
             },
 
             /**
