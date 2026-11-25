@@ -83,6 +83,10 @@ function initEditorApp() {
                 editingNodeForm: {}, // form values keyed by schema property name
                 editingNodeFormErrors: {},
                 nodeTypeSearch: '',
+                // Palette grouping: collapsed state per category name,
+                // session-scoped (all groups start expanded — pick noted
+                // in the task: remembering state needs no persistence).
+                paletteCollapsed: {},
                 dirty: false, // unsaved changes on the canvas
                 importJson: '',
                 importError: '',
@@ -244,8 +248,12 @@ function initEditorApp() {
             this.editor.connection_validator = info => this.validateNewConnection(info);
             this.editor.start();
             this.editor.editor_mode = 'edit';
-            this.loadWorkflows();
+            // Deep link: after the list loads, ?workflow=<id> selects
+            // that workflow; back/forward navigates via popstate.
+            this.loadWorkflows().then(() => this.applyWorkflowParam());
             this.loadNodeTypes();
+            this._popHandler = () => this.onPopState();
+            window.addEventListener('popstate', this._popHandler);
 
             // Deep link from the Settings page (/editor?env=global):
             // the global env table has a single editor — this modal —
@@ -406,6 +414,40 @@ function initEditorApp() {
                     (t.description || '').toLowerCase().includes(q) ||
                     (t.id || '').toLowerCase().includes(q)
                 );
+            },
+
+            /**
+             * Node-RED-style palette grouping: filteredNodeTypes split
+             * into category sections for the Add Node modal. Known
+             * categories order first (Node-RED-ish), the rest
+             * alphabetical, uncategorized last as "other". Groups with
+             * no surviving items are dropped — filtering keeps headers
+             * only where matches exist. Subflow defs and subflow port
+             * markers are just more categories.
+             */
+            groupedNodeTypes() {
+                const order = [
+                    'Common', 'Function', 'Actions', 'Network', 'Sequence',
+                    'Parsers', 'Storage', 'Dashboard', 'Triggers', 'Queue',
+                    'Document', 'Flow Control', 'AI', 'Subflows', 'Subflow ports'
+                ];
+                const buckets = {};
+                this.filteredNodeTypes.forEach(t => {
+                    const cat = (t.category || '').trim() || 'other';
+                    (buckets[cat] = buckets[cat] || []).push(t);
+                });
+                const rank = c => {
+                    const i = order.indexOf(c);
+                    if (c === 'other') return order.length + 1;
+                    return i === -1 ? order.length : i;
+                };
+                return Object.keys(buckets)
+                    .sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b))
+                    .map(name => ({
+                        name: name,
+                        items: buckets[name],
+                        collapsed: !!this.paletteCollapsed[name]
+                    }));
             },
 
             /**
@@ -671,6 +713,16 @@ function initEditorApp() {
             }
         },
         methods: {
+            /**
+             * Toggle a palette category's collapsed state (header click
+             * in the Add Node modal).
+             */
+            togglePaletteGroup(name) {
+                this.paletteCollapsed = Object.assign({}, this.paletteCollapsed, {
+                    [name]: !this.paletteCollapsed[name]
+                });
+            },
+
             /**
              * POST to the JSON API and unwrap the {status, data, message} envelope
              */
@@ -1020,9 +1072,65 @@ function initEditorApp() {
                     this.renderFlow(this.selectedWorkflow);
                     this.applyView(this.selectedWorkflow.view);
                     this.dirty = false;
+                    this.syncWorkflowParam();
                 } catch (err) {
-                    alert('Failed to load workflow: ' + err.message);
+                    this.showToast('Failed to load workflow: ' + err.message, 'error');
                 }
+            },
+
+            /**
+             * Deep links: keep ?workflow=<id> in the URL in sync with the
+             * selection so an open flow is shareable. pushState (not
+             * replaceState) so the back button walks workflow history —
+             * onPopState below navigates. Other params (env=global and
+             * friends) are preserved; a no-op when the URL already
+             * matches, which also stops popstate-driven selects from
+             * re-pushing the same entry.
+             */
+            syncWorkflowParam() {
+                const url = new URL(window.location.href);
+                if (this.selectedWorkflow) {
+                    url.searchParams.set('workflow', String(this.selectedWorkflow.id));
+                } else {
+                    url.searchParams.delete('workflow');
+                }
+                if (url.href !== window.location.href) {
+                    window.history.pushState({}, '', url.href);
+                }
+            },
+
+            /**
+             * Back/forward navigation: select the workflow named in the
+             * URL, or clear the workspace when the param is gone.
+             */
+            onPopState() {
+                const id = new URLSearchParams(window.location.search).get('workflow');
+                if (id && (!this.selectedWorkflow || String(this.selectedWorkflow.id) !== id)) {
+                    this.selectWorkflow({ id });
+                } else if (!id && this.selectedWorkflow) {
+                    this.deselectWorkflow();
+                }
+            },
+
+            /**
+             * Apply ?workflow=<id> once the list has loaded (deep-link
+             * entry). Unknown ids fail soft — the fetch error becomes a
+             * toast and the editor stays on the welcome screen.
+             */
+            applyWorkflowParam() {
+                const id = new URLSearchParams(window.location.search).get('workflow');
+                if (id) this.selectWorkflow({ id });
+            },
+
+            /**
+             * Clear the selection entirely: tabs close, the workspace is
+             * hidden and the welcome screen takes over.
+             */
+            deselectWorkflow() {
+                this.selectedWorkflow = null;
+                this.flowTabs = [];
+                this.activeTab = null;
+                this.dirty = false;
             },
 
             /**
@@ -4843,6 +4951,7 @@ function initEditorApp() {
             if (this.minimapTimer) clearTimeout(this.minimapTimer);
             if (this.historyDebounce) clearTimeout(this.historyDebounce);
             if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
+            if (this._popHandler) window.removeEventListener('popstate', this._popHandler);
         }
     });
     // Shared chrome: navbar comes from the AppNavigation component

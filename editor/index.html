@@ -257,6 +257,22 @@
         .node-type-item:hover {
             background: rgba(13, 110, 253, .12);
         }
+        .palette-group-header {
+            font-size: .78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--bs-secondary-color);
+            background: var(--bs-tertiary-bg);
+            padding-top: .3rem;
+            padding-bottom: .3rem;
+        }
+        .palette-group-chevron {
+            display: inline-block;
+            margin-right: .4rem;
+            transition: transform .15s ease;
+        }
+        .palette-group-chevron.open { transform: rotate(90deg); }
         .palette-dot {
             display: inline-block;
             width: 10px;
@@ -980,17 +996,27 @@
                                placeholder="Filter nodes...">
                     </div>
                     <div class="list-group list-group-flush">
-                        <button v-for="nodeType in filteredNodeTypes" :key="nodeType.id"
-                                class="list-group-item list-group-item-action node-type-item d-flex align-items-center"
-                                @click="addNodeFromModal(nodeType)">
-                            <span class="palette-dot" :style="{ background: nodeType.color }"></span>
-                            <i v-if="nodeType.icon" class="fas me-2 text-secondary" :class="'fa-' + nodeType.icon"></i>
-                            <span>
-                                <span class="d-block fw-semibold">{{ nodeType.name }}</span>
-                                <small v-if="nodeType.description" class="text-muted d-block">{{ nodeType.description }}</small>
-                                <small class="text-muted">{{ nodeType.inputs }} in / {{ nodeType.outputs }} out</small>
-                            </span>
-                        </button>
+                        <template v-for="group in groupedNodeTypes" :key="group.name">
+                            <button class="list-group-item list-group-item-action palette-group-header"
+                                    @click="togglePaletteGroup(group.name)">
+                                <i class="fas fa-chevron-right palette-group-chevron"
+                                   :class="{ open: !group.collapsed }"></i>
+                                {{ group.name }}
+                                <span class="badge bg-secondary rounded-pill ms-auto">{{ group.items.length }}</span>
+                            </button>
+                            <button v-for="nodeType in group.items" :key="group.name + '/' + nodeType.id"
+                                    v-if="!group.collapsed"
+                                    class="list-group-item list-group-item-action node-type-item d-flex align-items-center"
+                                    @click="addNodeFromModal(nodeType)">
+                                <span class="palette-dot" :style="{ background: nodeType.color }"></span>
+                                <i v-if="nodeType.icon" class="fas me-2 text-secondary" :class="'fa-' + nodeType.icon"></i>
+                                <span>
+                                    <span class="d-block fw-semibold">{{ nodeType.name }}</span>
+                                    <small v-if="nodeType.description" class="text-muted d-block">{{ nodeType.description }}</small>
+                                    <small class="text-muted">{{ nodeType.inputs }} in / {{ nodeType.outputs }} out</small>
+                                </span>
+                            </button>
+                        </template>
                         <div v-if="filteredNodeTypes.length === 0" class="list-group-item text-muted">
                             No node types match your search.
                         </div>

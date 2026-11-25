@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"html"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -83,7 +84,7 @@ func (s *Section) Home(w http.ResponseWriter, r *http.Request) {
 			`<td>` + strconv.Itoa(len(wf.GetNodes())) + `</td>` +
 			`<td>` + strconv.Itoa(len(wf.GetEdges())) + `</td>` +
 			`<td><div class="btn-group btn-group-sm">` +
-			`<a href="?controller=editor" class="btn btn-outline-primary">Edit</a>` +
+			`<a href="?controller=editor&workflow=` + url.QueryEscape(wf.GetID()) + `" class="btn btn-outline-primary">Edit</a>` +
 			`</div></td></tr>`)
 
 		activity.WriteString(activityItem(

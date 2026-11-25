@@ -3,6 +3,7 @@ package workflows
 import (
 	"html"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/dracory/cdn"
@@ -43,7 +44,7 @@ func (s *Section) Workflows(w http.ResponseWriter, r *http.Request) {
 			`<td>` + strconv.Itoa(len(wf.GetNodes())) + `</td>` +
 			`<td>` + strconv.Itoa(len(wf.GetEdges())) + `</td>` +
 			`<td>` + html.EscapeString(wf.GetUpdatedAt().Format("2006-01-02 15:04")) + `</td>` +
-			`<td><a href="?controller=editor" class="btn btn-sm btn-outline-primary">Edit</a></td></tr>`
+			`<td><a href="?controller=editor&workflow=` + url.QueryEscape(wf.GetID()) + `" class="btn btn-sm btn-outline-primary">Edit</a></td></tr>`
 	}
 
 	htmlOut := `<main class="container">` + shared.SectionNav(r, s.uiConfig.Store).ToHTML() + `

@@ -132,3 +132,95 @@ func TestEditorEmptyState(t *testing.T) {
 		t.Fatalf("console errors on editor: %v", errs)
 	}
 }
+
+// TestEditorWorkflowDeepLink covers shareable workflow URLs:
+// selecting a workflow writes ?workflow=<id> into the address bar,
+// and opening that URL in a fresh page auto-selects the workflow
+// (workspace + tab, no welcome screen).
+func TestEditorWorkflowDeepLink(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-editor-deep-link.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	// Deep-link target created straight through the API.
+	created := apiPost(t, srv.srv.URL, "/api/workflow-create",
+		map[string]any{"name": "E2E Deep Link", "nodes": []any{}, "edges": []any{}})
+	wf, _ := created["workflow"].(map[string]any)
+	require.NotNil(t, wf, "workflow-create should return the workflow")
+	id, _ := wf["id"].(string)
+	require.NotEmpty(t, id)
+
+	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor"))
+	waitVueApp(t, page)
+	waitElement(t, page, ".editor-welcome")
+
+	// Selecting the workflow in the explorer writes the URL param.
+	clickText(t, page, ".module-item.workflow-row", "E2E Deep Link")
+	waitElement(t, page, ".flow-tabs .flow-tab:not(.flow-tab-add)")
+	require.True(t, evalBool(t, page,
+		`new URLSearchParams(location.search).get('workflow') === `+js(id)),
+		"selecting a workflow must write ?workflow=<id> into the URL")
+
+	// A fresh page on that URL auto-selects the workflow: the
+	// workspace opens without any explorer click.
+	require.NoError(t, chromedp.Run(page,
+		chromedp.Navigate(srv.browserURL("/?controller=editor&workflow="+id))))
+	waitVueApp(t, page)
+	waitElement(t, page, ".flow-tabs .flow-tab:not(.flow-tab-add)")
+	require.False(t, evalBool(t, page,
+		`getComputedStyle(document.querySelector('.editor-workspace')).display === 'none'`),
+		"deep link must open the workspace without explorer interaction")
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
+
+// TestEditorPaletteGrouping covers the Node-RED-style grouped palette:
+// the Add Node modal renders category headers (name + count), groups
+// collapse on header click, and filtering hides empty groups while
+// keeping headers for surviving ones.
+func TestEditorPaletteGrouping(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-editor-palette.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	created := apiPost(t, srv.srv.URL, "/api/workflow-create",
+		map[string]any{"name": "E2E Palette", "nodes": []any{}, "edges": []any{}})
+	wf, _ := created["workflow"].(map[string]any)
+	require.NotNil(t, wf)
+	id, _ := wf["id"].(string)
+	require.NotEmpty(t, id)
+
+	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor&workflow="+id))
+	waitVueApp(t, page)
+
+	click(t, page, `button[title="Add node"]:not(:disabled)`)
+	waitElement(t, page, "#addNodeModal .palette-group-header")
+
+	total := elementsLen(t, page, "#addNodeModal .palette-group-header")
+	require.Greater(t, total, 1, "palette should render multiple category groups")
+
+	// Collapse the first group: its items hide, the header stays.
+	firstItems := `[...document.querySelectorAll('#addNodeModal .node-type-item')].filter(e => e.offsetParent !== null).length`
+	before := 0
+	require.NoError(t, eval(page, firstItems, &before))
+	click(t, page, "#addNodeModal .palette-group-header")
+	var after int
+	require.NoError(t, eval(page, firstItems, &after))
+	require.Less(t, after, before, "collapsing a group must hide its items")
+
+	// Re-open it, then filter: headers survive where matches exist,
+	// empty groups disappear.
+	click(t, page, "#addNodeModal .palette-group-header")
+	setInput(t, page, "#addNodeModal input", "debug")
+	filtered := elementsLen(t, page, "#addNodeModal .palette-group-header")
+	require.Greater(t, filtered, 0, "headers remain for groups with matches")
+	require.Less(t, filtered, total, "empty groups are hidden while filtering")
+	require.Positive(t, elementsLen(t, page, "#addNodeModal .node-type-item"),
+		"filtering by a type name must still list items")
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
