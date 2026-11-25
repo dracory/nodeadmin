@@ -6,8 +6,8 @@ import (
 
 	guapi "github.com/dracory/api"
 
-	"github.com/dracory/nodestore"
 	"github.com/dracory/nodebase"
+	"github.com/dracory/nodestore"
 
 	_ "github.com/dracory/nodebase/builtin" // register built-in node types (palette + deploy)
 )

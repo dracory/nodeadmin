@@ -9,8 +9,8 @@ import (
 
 	guapi "github.com/dracory/api"
 
-	"github.com/dracory/nodestore"
 	"github.com/dracory/nodebase"
+	"github.com/dracory/nodestore"
 )
 
 // This file covers the lifecycle/global-state endpoints the editor

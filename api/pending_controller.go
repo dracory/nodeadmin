@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/dracory/neat"
 	guapi "github.com/dracory/api"
+	"github.com/dracory/neat"
 )
 
 // inboxMessagesTable is the durable per-node handoff table noderun's
