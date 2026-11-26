@@ -149,6 +149,27 @@ func New(opts Options) (Interface, error) {
 			}
 		}
 	}
+	// Persistent function-node context (node/flow/global scopes): the
+	// same entity DB stores serialized context values. A caller-supplied
+	// ContextStore wins — like the inbox and lease stores — and stores
+	// without the context-value capability keep the engine's explicit
+	// in-memory fallback.
+	if engine, ok := opts.Engine.(*noderunner.WorkflowEngine); ok && engine.ContextStore == nil {
+		if sqlDB := opts.Store.GetEntityStore().GetDB(); sqlDB != nil {
+			// The persistent-context capability is discovered structurally
+			// so this admin remains compilable against runner versions that
+			// predate it; those versions keep the in-memory fallback.
+			if wirer, ok := opts.Engine.(interface {
+				ConfigureEntityContextStore(nodestore.StoreInterface) error
+			}); ok {
+				if err := wirer.ConfigureEntityContextStore(opts.Store); err != nil {
+					log.Printf("nodeadmin: persistent context store unavailable (in-memory context): %v", err)
+				}
+			} else {
+				log.Printf("nodeadmin: persistent context store unavailable (in-memory context): runner does not support entity context stores")
+			}
+		}
+	}
 	if engine, ok := opts.Engine.(*noderunner.WorkflowEngine); ok {
 		// Lease coordination (P4): the same shared DB hosts the
 		// workflow_leases/runners tables — a caller-supplied
