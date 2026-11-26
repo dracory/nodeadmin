@@ -464,3 +464,21 @@ func TestWorkflowUpdatePreservesDeployed(t *testing.T) {
 		t.Fatalf("deployed flag wiped by editor save: %v", err)
 	}
 }
+
+// TestGetAuthUserIDOnlyLeavesEngineOpen proves GetAuthUserID is
+// identity-only: without IsAccessAllowed it must not become an access
+// decision on node-served listeners.
+func TestGetAuthUserIDOnlyLeavesEngineOpen(t *testing.T) {
+	engine := noderunner.NewWorkflowEngine()
+	_, err := New(Options{
+		Store:         newTestStore(t),
+		Engine:        engine,
+		GetAuthUserID: func(r *http.Request) string { return "" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if engine.HTTPAuthenticatorFunc() != nil {
+		t.Fatal("GetAuthUserID alone must not install an engine HTTPAuthenticator")
+	}
+}

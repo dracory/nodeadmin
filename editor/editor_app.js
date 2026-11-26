@@ -30,7 +30,7 @@ function uuidV7() {
 const NODE_SIZE = { w: 200, h: 90 };
 
 /**
- * Component port marker node types (component_module_tree). These are
+ * Component port marker node types (component_child_flow_tree). These are
  * canvas-only pseudo nodes living inside role:"component" childFlows —
  * they never reach the backend node list. On save each marker becomes
  * one entry of the definition's in[]/out[] port arrays
@@ -38,7 +38,7 @@ const NODE_SIZE = { w: 200, h: 90 };
  * markers (renderComponentDef). The node's data.portIndex pins the port
  * order so dragging a marker never renumbers instance ports.
  */
-const SUBFLOW_PORT_TYPES = [
+const COMPONENT_PORT_TYPES = [
     {
         id: 'componentIn', name: 'Component input',
         description: 'Input port of this component',
@@ -99,13 +99,13 @@ function initEditorApp() {
                 dirty: false, // unsaved changes on the canvas
                 importJson: '',
                 importError: '',
-                // Child flow import modal (module_export_import): pasted
+                // Child flow import modal (childflow_export_import): pasted
                 // child flow envelope merged into this workflow.
                 flowImportJson: '',
                 flowImportError: '',
                 // Component definitions are canvas childFlows now: each
                 // type:"component" node of the workflow materializes as a
-                // role:"component" child flow (component_module_tree) edited in
+                // role:"component" child flow (component_child_flow_tree) edited in
                 // place with componentIn/componentOut port markers. The
                 // componentDefs computed derives the palette entries
                 // ("component:<id>" instances) from those childFlows.
@@ -147,7 +147,7 @@ function initEditorApp() {
                 // list and child flow navigator merged into one Explorer
                 // tree. treeGroups is the in-memory copy of
                 // view.treeGroups — a flat list of folder objects
-                // {id, name, parentId, childFlows:[moduleId]}; parentId
+                // {id, name, parentId, childFlows:[childFlowId]}; parentId
                 // nests folders, child flow membership is by child flow id
                 // (renames don't break it). Folders organize ONLY:
                 // no deploy/env/disabled semantics.
@@ -432,7 +432,7 @@ function initEditorApp() {
                     // instantiate itself (recursive expansion fails
                     // deploy).
                     const selfId = 'component:' + this.flowIdFor(this.activeTab);
-                    all = all.filter(t => t.id !== selfId).concat(SUBFLOW_PORT_TYPES);
+                    all = all.filter(t => t.id !== selfId).concat(COMPONENT_PORT_TYPES);
                 }
                 // Quick-add (task 37 + input-side drags): a wire dragged
                 // from an output needs a type with inputs; a wire dragged
@@ -709,7 +709,7 @@ function initEditorApp() {
 
             /**
              * Component definitions derived from the materialized
-             * role:"component" canvas childFlows (component_module_tree —
+             * role:"component" canvas childFlows (component_child_flow_tree —
              * definitions became childFlows; the type:"component" node is
              * only the serialization format). Each entry mirrors the
              * old def shape ({id, data:{name,in,out}}) the palette and
@@ -1066,7 +1066,7 @@ function initEditorApp() {
                 return this.nodeTypes.find(t => t.id === typeId) ||
                     this.pendingComponentTypes[typeId] ||
                     this.componentTypes.find(t => t.id === typeId) ||
-                    SUBFLOW_PORT_TYPES.find(t => t.id === typeId);
+                    COMPONENT_PORT_TYPES.find(t => t.id === typeId);
             },
 
             /**
@@ -1179,13 +1179,13 @@ function initEditorApp() {
             renderFlow(workflow) {
                 this.suppressHistory = true;
                 try {
-                    this.resetModules();
+                    this.resetChildFlows();
                     this.drawflowToBackend = {};
                     this.backendToDrawflow = {};
 
                     // Component definitions live in the nodes list as
                     // type:"component" but are templates: each becomes a
-                    // role:"component" canvas child flow (component_module_tree)
+                    // role:"component" canvas child flow (component_child_flow_tree)
                     // rendered by renderComponentDef below.
                     const componentDefNodes = (workflow.nodes || []).filter(n => n.type === 'component');
                     const componentDefIds = {};
@@ -1239,8 +1239,8 @@ function initEditorApp() {
                             category: 'Components'
                         };
                     });
-                    const defModuleKeys = componentDefNodes.map(d => this.prepareComponentDefFlow(d));
-                    componentDefNodes.forEach((d, i) => this.populateComponentDefFlow(d, defModuleKeys[i]));
+                    const componentDefKeys = componentDefNodes.map(d => this.prepareComponentDefFlow(d));
+                    componentDefNodes.forEach((d, i) => this.populateComponentDefFlow(d, componentDefKeys[i]));
 
                     // Group nodes by their tab. data.childFlow stores the
                     // child flow id; legacy workflows store the child flow
@@ -1252,9 +1252,9 @@ function initEditorApp() {
                             (node.data && node.data.childFlow) || 'Home');
                         (groups[flow] = groups[flow] || []).push(node);
                     });
-                    const moduleNames = Object.keys(groups);
-                    if (!moduleNames.length) moduleNames.push('Home');
-                    moduleNames.forEach(m => {
+                    const childFlowKeys = Object.keys(groups);
+                    if (!childFlowKeys.length) childFlowKeys.push('Home');
+                    childFlowKeys.forEach(m => {
                         if (!this.editor.drawflow.drawflow[m]) this.editor.addModule(m);
                     });
                     // Tabs cover every materialized canvas child flow —
@@ -1263,11 +1263,11 @@ function initEditorApp() {
                     const savedLabels = savedFlows
                         .filter(m => m && m.id)
                         .map(m => m.label || 'Home');
-                    const ordered = moduleNames
-                        .concat(savedLabels.filter(n => moduleNames.indexOf(n) === -1))
-                        .concat(defModuleKeys.filter(n => moduleNames.indexOf(n) === -1 && savedLabels.indexOf(n) === -1));
+                    const ordered = childFlowKeys
+                        .concat(savedLabels.filter(n => childFlowKeys.indexOf(n) === -1))
+                        .concat(componentDefKeys.filter(n => childFlowKeys.indexOf(n) === -1 && savedLabels.indexOf(n) === -1));
                     // Drop canvas childFlows not backed by nodes or a
-                    // saved entity — the leftover kept by resetModules
+                    // saved entity — the leftover kept by resetChildFlows
                     // (e.g. 'Home' after the workflow's Home child flow was
                     // renamed) must not resurface as a phantom tab.
                     const wanted = {};
@@ -1302,7 +1302,7 @@ function initEditorApp() {
                     this.knownFlows = ordered.slice();
                     this.flowTreeVersion++;
 
-                    moduleNames.forEach(flow => {
+                    childFlowKeys.forEach(flow => {
                         this.editor.changeModule(flow);
                         const idMap = {}; // backend node id -> Drawflow node id (within this child flow)
                         (groups[flow] || []).forEach(node => {
@@ -1348,7 +1348,7 @@ function initEditorApp() {
              * Remove all nodes from every child flow and delete extra childFlows,
              * leaving a single empty child flow named 'Home'
              */
-            resetModules() {
+            resetChildFlows() {
                 const childFlows = Object.keys(this.editor.drawflow.drawflow || {});
                 childFlows.forEach(m => {
                     this.editor.changeModule(m);
@@ -1369,7 +1369,7 @@ function initEditorApp() {
             },
 
             /**
-             * Pass 1 of definition materialization (component_module_tree):
+             * Pass 1 of definition materialization (component_child_flow_tree):
              * create the role:"component" canvas child flow and its meta for
              * one type:"component" node. The child flow key is the def name
              * deduped against existing canvas childFlows; the def id
@@ -1565,9 +1565,9 @@ function initEditorApp() {
                 const edges = [];
                 // Merge every Drawflow child flow (tab) into the single backend
                 // nodes+edges set. data.childFlow carries the stable child flow
-                // id (meta.id); data.moduleName is a denormalized display
+                // id (meta.id); data.childFlowName is a denormalized display
                 // label so stored documents stay human-readable. Canvas
-                // child flow keys remain names — Drawflow keys modules by name.
+                // child flow keys remain names — Drawflow keys child flows by name.
                 Object.keys(childFlows).forEach(flowName => {
                     const meta = (this.editor && typeof this.editor.getModuleMeta === 'function')
                         ? (this.editor.getModuleMeta(flowName) || {}) : {};
@@ -1589,7 +1589,7 @@ function initEditorApp() {
                         if (markerIds[id]) return;
                         const data = Object.assign({}, n.data || {});
                         data.childFlow = meta.id || flowName;
-                        if (meta.label) data.moduleName = meta.label;
+                        if (meta.label) data.childFlowName = meta.label;
                         nodes.push({
                             id: String(id),
                             type: n.class || 'unknown',
@@ -1616,7 +1616,7 @@ function initEditorApp() {
 
             /**
              * Serialize every role:"component" canvas child flow back into a
-             * type:"component" definition node (component_module_tree) —
+             * type:"component" definition node (component_child_flow_tree) —
              * the inverse of renderComponentDef. Port markers become
              * in[]/out[] entries ordered by their data.portIndex; the
              * remaining nodes/edges become the definition's internal
@@ -1686,7 +1686,7 @@ function initEditorApp() {
                         if (markerIds[id]) return;
                         const data = Object.assign({}, n.data || {});
                         delete data.childFlow;
-                        delete data.moduleName;
+                        delete data.childFlowName;
                         delete data.portIndex;
                         nodes.push({
                             id: String(id),
@@ -2604,7 +2604,7 @@ function initEditorApp() {
                     openFlows: this.flowTabs.map(t => this.flowIdFor(t.childFlow)),
                     // Sidebar folders (sidebar_file_tree): pure
                     // organization state — [{id,name,parentId,
-                    // childFlows:[moduleId]}]; carries no runtime meaning.
+                    // childFlows:[childFlowId]}]; carries no runtime meaning.
                     treeGroups: this.serializeTreeGroups()
                 };
             },
@@ -2614,7 +2614,7 @@ function initEditorApp() {
              */
             applyView(view) {
                 // Sidebar folder state (view.treeGroups): a flat list
-                // of {id,name,parentId,childFlows:[moduleId]}. Missing or
+                // of {id,name,parentId,childFlows:[childFlowId]}. Missing or
                 // malformed entries degrade to the ungrouped flat
                 // list; stale child flow refs are skipped at render.
                 const tg = (view && Array.isArray(view.treeGroups)) ? view.treeGroups : [];
@@ -2699,7 +2699,7 @@ function initEditorApp() {
 
             /**
              * Create a component definition as a role:"component" canvas
-             * child flow (component_module_tree) and open it in a tab. The
+             * child flow (component_child_flow_tree) and open it in a tab. The
              * default inner graph is one input marker wired through a
              * passthrough junction to one output marker, so an instance
              * works out of the box; the user edits the inner graph and
@@ -2927,12 +2927,12 @@ function initEditorApp() {
              * already reach source through the current edge map)
              */
             wouldCreateCycle(sourceId, targetId) {
-                const moduleData = (this.editor.drawflow.drawflow[this.editor.module] || {}).data || {};
+                const childFlowData = (this.editor.drawflow.drawflow[this.editor.module] || {}).data || {};
                 const adjacency = {};
-                Object.keys(moduleData).forEach(id => {
+                Object.keys(childFlowData).forEach(id => {
                     adjacency[String(id)] = [];
-                    Object.keys(moduleData[id].outputs || {}).forEach(outputKey => {
-                        (moduleData[id].outputs[outputKey].connections || []).forEach(c => {
+                    Object.keys(childFlowData[id].outputs || {}).forEach(outputKey => {
+                        (childFlowData[id].outputs[outputKey].connections || []).forEach(c => {
                             adjacency[String(id)].push(String(c.node));
                         });
                     });
@@ -3532,7 +3532,7 @@ function initEditorApp() {
                 const flow = this.exportFlow();
                 // Component definitions are canvas childFlows now: each
                 // role:"component" child flow serializes back into a
-                // type:"component" definition node (component_module_tree).
+                // type:"component" definition node (component_child_flow_tree).
                 this.serializeComponentDefs().forEach(d => flow.nodes.push(d));
                 this.setSaveStatus('saving', 'Saving...');
                 try {
@@ -4499,7 +4499,7 @@ function initEditorApp() {
                 this.contextMenu.show = false;
             },
 
-            /* ---- Flow tabs + child flow navigator (task 11 / modules_as_first_class) ---- */
+            /* ---- Flow tabs + child flow navigator (task 11 / child_flows_first_class) ---- */
 
             /**
              * Switch the visible canvas to another child flow/tab
@@ -4602,7 +4602,7 @@ function initEditorApp() {
 
             /**
              * Sanitized folder list persisted as view.treeGroups:
-             * [{id,name,parentId,childFlows:[moduleId]}]. Drops parent
+             * [{id,name,parentId,childFlows:[childFlowId]}]. Drops parent
              * ids pointing at deleted folders and child flow refs that no
              * longer resolve to a materialized child flow; a child flow id
              * claimed by two folders stays with the first.
@@ -4880,7 +4880,7 @@ function initEditorApp() {
                 }
             },
 
-            /* ---- Child flow export/import (module_export_import) ---- */
+            /* ---- Child flow export/import (childflow_export_import) ---- */
 
             /**
              * Export one child flow as a portable child flow envelope
@@ -4904,7 +4904,7 @@ function initEditorApp() {
                         id: this.selectedWorkflow.id,
                         childFlow: this.flowIdFor(flowKey)
                     });
-                    const json = JSON.stringify(data.module_export, null, 2);
+                    const json = JSON.stringify(data.child_flow_export, null, 2);
                     const warnCount = (data.warnings || []).length;
                     (data.warnings || []).forEach(w => console.warn('child flow export:', w));
                     const note = warnCount ? ' — ' + warnCount + ' external-ref warning(s), see console' : '';
@@ -4934,7 +4934,7 @@ function initEditorApp() {
                         id: this.selectedWorkflow.id,
                         component: def.id
                     });
-                    const json = JSON.stringify(data.module_export, null, 2);
+                    const json = JSON.stringify(data.child_flow_export, null, 2);
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(json)
                             .then(() => this.showToast('Component export copied to clipboard', 'info'))
@@ -4982,7 +4982,7 @@ function initEditorApp() {
                     if (this.dirty) await this.saveWorkflow();
                     const data = await this.api('/api/child-flow-import', {
                         id: this.selectedWorkflow.id,
-                        module_export: parsed
+                        child_flow_export: parsed
                     });
                     bootstrap.Modal.getInstance(this.$refs.flowImportModal).hide();
                     if (data.workflow) {

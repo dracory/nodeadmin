@@ -803,3 +803,55 @@ func TestChildFlowExportImportErrors(t *testing.T) {
 	env, _ = postAPI(t, a, "/api/child-flow-import", map[string]interface{}{"id": "wf-1"})
 	apiError(t, env, "child flow import without payload")
 }
+
+func TestChildFlowExportImportRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	a := New(store, nil)
+	wf := seedWorkflow(t, store, "wf-1", "wf-1")
+	wf.GetNodes()[0].SetData(map[string]interface{}{"childFlow": "flow-1"})
+	wf.SetView(map[string]interface{}{
+		"childFlows": []interface{}{
+			map[string]interface{}{"id": "flow-1", "label": "Main", "role": "flow", "enabled": true},
+		},
+	})
+	if err := store.WorkflowUpdate(context.Background(), wf); err != nil {
+		t.Fatalf("workflow update: %v", err)
+	}
+	wf2 := nodestore.NewWorkflow("wf-2").SetID("wf-2").SetNodes([]nodestore.NodeInterface{
+		nodestore.NewNode("target-n1", "junction").SetData(map[string]interface{}{}),
+	})
+	if err := store.WorkflowCreate(context.Background(), wf2); err != nil {
+		t.Fatalf("target workflow create: %v", err)
+	}
+
+	env, _ := postAPI(t, a, "/api/child-flow-export", map[string]interface{}{
+		"id": "wf-1", "childFlow": "flow-1",
+	})
+	exported, ok := apiData(t, env, "/api/child-flow-export")["child_flow_export"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("canonical child_flow_export missing: %v", env)
+	}
+
+	env, _ = postAPI(t, a, "/api/child-flow-import", map[string]interface{}{
+		"id": "wf-2", "child_flow_export": exported,
+	})
+	updated, ok := apiData(t, env, "/api/child-flow-import")["workflow"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("updated workflow missing: %v", env)
+	}
+	view, _ := updated["view"].(map[string]interface{})
+	flows, _ := view["childFlows"].([]interface{})
+	if len(flows) != 1 {
+		t.Fatalf("imported child flow entities = %v", flows)
+	}
+
+	// The legacy flow and module_export fields remain accepted as input aliases.
+	env, _ = postAPI(t, a, "/api/child-flow-export", map[string]interface{}{
+		"id": "wf-1", "flow": "flow-1",
+	})
+	apiData(t, env, "/api/child-flow-export")
+	env, _ = postAPI(t, a, "/api/child-flow-import", map[string]interface{}{
+		"id": "wf-2", "module_export": exported,
+	})
+	apiData(t, env, "/api/child-flow-import")
+}

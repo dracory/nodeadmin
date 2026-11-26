@@ -243,8 +243,7 @@ func New(opts Options) (Interface, error) {
 		engine.HTTPRouter = a.endpoints
 		// Node-served listeners authenticate through the same host
 		// seam as the admin surface — nodeadmin owns no credentials.
-		switch {
-		case opts.IsAccessAllowed != nil:
+		if opts.IsAccessAllowed != nil {
 			engine.HTTPAuthenticator = func(r *http.Request) (string, bool) {
 				if !opts.IsAccessAllowed(r) {
 					return "", false
@@ -253,11 +252,6 @@ func New(opts Options) (Interface, error) {
 					return opts.GetAuthUserID(r), true
 				}
 				return "", true
-			}
-		case opts.GetAuthUserID != nil:
-			engine.HTTPAuthenticator = func(r *http.Request) (string, bool) {
-				userID := opts.GetAuthUserID(r)
-				return userID, userID != ""
 			}
 		}
 		// Dashboard runtime bridge (task dashboard_hub_nodes):

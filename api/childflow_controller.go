@@ -13,10 +13,11 @@ import (
 // the editor's component/child-flow export and import dialogs.
 
 // childFlowExportRequest carries a workflow id plus the child flow or
-// component name to export; "flow" and "component" are accepted as the
-// field names.
+// component id to export. childFlow is the canonical field; flow is
+// accepted as a legacy alias.
 type childFlowExportRequest struct {
 	ID        string `json:"id"`
+	ChildFlow string `json:"childFlow"`
 	Flow      string `json:"flow"`
 	Component string `json:"component"`
 }
@@ -44,7 +45,11 @@ func (a *Api) exportChildFlow(w http.ResponseWriter, r *http.Request) {
 	if req.Component != "" {
 		export, err = nodestore.ExportComponentDef(workflow, req.Component)
 	} else {
-		export, err = nodestore.ExportChildFlow(workflow, req.Flow)
+		flowRef := req.ChildFlow
+		if flowRef == "" {
+			flowRef = req.Flow
+		}
+		export, err = nodestore.ExportChildFlow(workflow, flowRef)
 	}
 	if err != nil {
 		respond(w, guapi.Error(err.Error()))
@@ -58,12 +63,13 @@ func (a *Api) exportChildFlow(w http.ResponseWriter, r *http.Request) {
 }
 
 // childFlowImportRequest carries a workflow id plus the child-flow
-// envelope; "child_flow_export" and "payload" are both accepted as the
-// field name.
+// envelope. child_flow_export is canonical; payload and the legacy
+// module_export field are accepted as input aliases.
 type childFlowImportRequest struct {
 	ID              string          `json:"id"`
 	ChildFlowExport json.RawMessage `json:"child_flow_export"`
 	Payload         json.RawMessage `json:"payload"`
+	ModuleExport    json.RawMessage `json:"module_export"`
 }
 
 // importChildFlow merges a child-flow envelope into an existing
@@ -80,6 +86,9 @@ func (a *Api) importChildFlow(w http.ResponseWriter, r *http.Request) {
 	raw := req.ChildFlowExport
 	if len(raw) == 0 {
 		raw = req.Payload
+	}
+	if len(raw) == 0 {
+		raw = req.ModuleExport
 	}
 	if len(raw) == 0 {
 		respond(w, guapi.Error("child_flow_export payload is required"))
