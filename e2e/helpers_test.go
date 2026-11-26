@@ -254,6 +254,10 @@ func newLocalBrowser(t *testing.T, bin string) *browser {
 		chromedp.DefaultExecAllocatorOptions[1:]...),
 		chromedp.ExecPath(bin),
 		chromedp.Flag("headless", "new"),
+		// CI containers cannot configure the SUID sandbox helper —
+		// Chrome aborts on startup without this flag.
+		chromedp.NoSandbox,
+		chromedp.Flag("disable-dev-shm-usage", true),
 		// Desktop-width viewport so Bootstrap lg breakpoints render.
 		chromedp.Flag("window-size", "1400,900"),
 	)
@@ -556,6 +560,9 @@ func elementsLen(t *testing.T, ctx context.Context, sel string) int {
 // ctx is the shared tab context for all further actions.
 func mustPage(t *testing.T, b *browser, url string) (context.Context, *consoleWatcher) {
 	t.Helper()
+	if b == nil || b.tabCtx == nil {
+		t.Fatal("shared browser is unavailable — an earlier launchBrowser failure left it nil")
+	}
 	b.watcher.reset()
 	runCtx, runCancel := context.WithTimeout(b.tabCtx, 120*time.Second)
 	defer runCancel()
