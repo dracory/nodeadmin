@@ -41,8 +41,11 @@ func (u *ui) renderPage(w http.ResponseWriter, r *http.Request) {
 	}
 	urlsJSON, _ := json.Marshal(urls)
 
-	page := strings.Replace(settingsHTML, `<main class="container py-4">`,
-		`<main class="container py-4">`+shared.SectionNav(r, u.config.Store).ToHTML(), 1)
+	// The quicknav sits above the page head; anchor on the page-head
+	// div rather than the main tag — the container's attributes have
+	// drifted before (max-width) and a silent no-match drops the nav.
+	page := strings.Replace(settingsHTML, `<div class="page-head`,
+		shared.SectionNav(r, u.config.Store).ToHTML()+`<div class="page-head`, 1)
 
 	// The Vue app mounts #app — the fragment has no such element, so
 	// wrap it here (without it app.mount throws and the page renders

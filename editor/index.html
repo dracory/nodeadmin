@@ -909,7 +909,7 @@
                         <i class="fas fa-pen me-2"></i>Rename
                     </button>
                     <button class="dropdown-item"
-                            @click="exportFlow(flowContextMenu.childFlow); closeFlowContextMenu()">
+                            @click="exportChildFlow(flowContextMenu.childFlow); closeFlowContextMenu()">
                         <i class="fas fa-file-export me-2"></i>{{ flowRoleFor(flowContextMenu.childFlow) === 'component' ? 'Export component…' : 'Export child flow…' }}
                     </button>
                     <button v-if="flowRoleFor(flowContextMenu.childFlow) === 'component'" class="dropdown-item"

@@ -25,7 +25,7 @@ func TestSettingsMountsAndSaves(t *testing.T) {
 
 	// Set a max-steps override and save.
 	setInput(t, page, "#maxSteps", "1234")
-	clickText(t, page, "button", "Save Changes")
+	clickText(t, page, "button", "Save engine settings")
 
 	// The save roundtrips and reloads the form; assert via a fresh
 	// page load that the override persisted in the config store.

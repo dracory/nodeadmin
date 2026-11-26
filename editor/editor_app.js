@@ -4890,7 +4890,7 @@ function initEditorApp() {
              * the export kept but could not resolve come back as
              * warnings.
              */
-            async exportFlow(flowKey) {
+            async exportChildFlow(flowKey) {
                 if (!this.selectedWorkflow) return;
                 // A role:"component" child flow is a definition — its portable
                 // form is the def envelope (ExportComponentDef), not the
