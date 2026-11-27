@@ -10,9 +10,9 @@ require (
 	github.com/dracory/entitystore v1.24.0
 	github.com/dracory/hb v1.88.0
 	github.com/dracory/neat v0.62.2
-	github.com/dracory/nodebase v0.7.0
-	github.com/dracory/noderun v0.6.0
-	github.com/dracory/nodestore v0.5.0
+	github.com/dracory/nodebase v0.8.0
+	github.com/dracory/noderun v0.7.0
+	github.com/dracory/nodestore v0.5.1
 	github.com/stretchr/testify v1.12.1
 	modernc.org/sqlite v1.63.0
 )
