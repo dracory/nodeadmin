@@ -189,6 +189,7 @@ function initEditorApp() {
                 selectedNodeIds: [], // ctrl/meta-click multi-selection
                 // Execution state (tasks 05/06: run/stop + debug panel)
                 running: false,
+                paused: false,
                 executionId: null,
                 pollTimer: null, // status polling interval handle
                 lastEventSeq: 0, // last event sequence seen by the poller
@@ -3736,6 +3737,7 @@ function initEditorApp() {
                     const data = await this.api('/api/workflow-start', { id: this.selectedWorkflow.id });
                     this.executionId = data.execution_id || null;
                     this.running = true;
+                    this.paused = data.status === 'paused';
                     this.debugOpen = true;
                     this.setSaveStatus('saved', 'Workflow deployed');
                     this.startPolling();
@@ -3756,9 +3758,35 @@ function initEditorApp() {
                     this.showToast('Stop failed: ' + err.message, 'danger');
                 }
                 this.running = false;
+                this.paused = false;
                 this.runnerId = null;
                 this.stopPolling();
                 this.clearNodeStatuses();
+            },
+
+            /** Pause delivery without undeploying triggers or losing backlog. */
+            async pauseWorkflow() {
+                if (!this.selectedWorkflow || !this.running || this.paused) return;
+                try {
+                    await this.api('/api/workflow-pause', { id: this.selectedWorkflow.id });
+                    this.paused = true;
+                    this.showToast('Workflow paused — new deliveries are queued', 'info');
+                } catch (err) {
+                    this.showToast('Pause failed: ' + err.message, 'danger');
+                }
+            },
+
+            /** Resume a paused workflow and keep polling its drained backlog. */
+            async resumeWorkflow() {
+                if (!this.selectedWorkflow || !this.running || !this.paused) return;
+                try {
+                    await this.api('/api/workflow-resume', { id: this.selectedWorkflow.id });
+                    this.paused = false;
+                    this.showToast('Workflow resumed', 'success');
+                    if (!this.pollTimer) this.startPolling();
+                } catch (err) {
+                    this.showToast('Resume failed: ' + err.message, 'danger');
+                }
             },
 
             /**
@@ -3829,8 +3857,10 @@ function initEditorApp() {
                     this.pollPendingCounts();
                     if (Array.isArray(data.events)) this.appendDebugEvents(data.events);
                     if (typeof data.last_seq === 'number') this.lastEventSeq = data.last_seq;
-                    if (data.status !== 'running') {
+                    this.paused = data.status === 'paused';
+                    if (data.status !== 'running' && data.status !== 'paused') {
                         this.running = false;
+                        this.paused = false;
                         this.runnerId = null;
                         this.stopPolling();
                     }

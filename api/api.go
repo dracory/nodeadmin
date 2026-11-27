@@ -29,8 +29,13 @@ type EngineInterface interface {
 	DeployWorkflowPartial(ctx context.Context, workflow nodestore.WorkflowInterface, input nodestore.MessageInterface) (string, error)
 	// StopWorkflow stops a running workflow.
 	StopWorkflow(workflowID string) error
-	// GetWorkflowStatus reports "running" | "stopped".
+	// GetWorkflowStatus reports "running" | "paused" | "stopped".
 	GetWorkflowStatus(workflowID string) (string, error)
+	// PauseWorkflow closes the workflow delivery gate while keeping
+	// in-flight work and persisted backlog intact.
+	PauseWorkflow(workflowID string) error
+	// ResumeWorkflow reopens a paused workflow delivery gate.
+	ResumeWorkflow(workflowID string) error
 	// FireInjectNode fires a running inject node's own configured
 	// payload (the editor fire button).
 	FireInjectNode(workflowID, nodeID string) error
@@ -120,6 +125,8 @@ func (a *Api) buildRoutes() *http.ServeMux {
 	// Workflow lifecycle (deployed flag)
 	mux.HandleFunc("POST /api/workflow-start", a.workflowStart)
 	mux.HandleFunc("POST /api/workflow-stop", a.workflowStop)
+	mux.HandleFunc("POST /api/workflow-pause", a.workflowPause)
+	mux.HandleFunc("POST /api/workflow-resume", a.workflowResume)
 	mux.HandleFunc("POST /api/workflow-status", a.workflowStatus)
 
 	// Workflow groups + global env (config entity)

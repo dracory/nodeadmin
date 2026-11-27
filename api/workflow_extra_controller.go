@@ -145,10 +145,14 @@ func (a *Api) workflowStop(w http.ResponseWriter, r *http.Request) {
 		respond(w, guapi.Error("workflow not found"))
 		return
 	}
-	if workflow.GetDeployed() {
+	if workflow.GetDeployed() || workflow.GetPaused() {
 		workflow.SetDeployed(false)
+		// Stop is a terminal lifecycle transition: a later start deploys
+		// the flow running, not paused. The engine clears its runtime gate;
+		// mirror that in the persisted entity here.
+		workflow.SetPaused(false)
 		if err := a.store.WorkflowUpdate(r.Context(), workflow); err != nil {
-			respond(w, guapi.Error("could not clear deployed flag: "+err.Error()))
+			respond(w, guapi.Error("could not clear deployed/paused flags: "+err.Error()))
 			return
 		}
 	}
@@ -159,6 +163,82 @@ func (a *Api) workflowStop(w http.ResponseWriter, r *http.Request) {
 	respond(w, guapi.SuccessWithData("workflow stopped", map[string]any{
 		"workflow": workflow,
 		"status":   "stopped",
+	}))
+}
+
+// workflowPause closes the workflow delivery gate through the engine and
+// persists the paused flag so the state survives process restarts. The
+// engine remains the lifecycle authority: invalid transitions (stopped or
+// already paused) are returned unchanged.
+func (a *Api) workflowPause(w http.ResponseWriter, r *http.Request) {
+	var req idRequest
+	if err := bindJSON(r, &req); err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	if a.engine == nil {
+		respond(w, guapi.Error("workflow engine not available"))
+		return
+	}
+	workflow, err := a.store.WorkflowFindByID(r.Context(), req.ID)
+	if err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	if workflow == nil {
+		respond(w, guapi.Error("workflow not found"))
+		return
+	}
+	if err := a.engine.PauseWorkflow(req.ID); err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	workflow.SetPaused(true)
+	if err := a.store.WorkflowUpdate(r.Context(), workflow); err != nil {
+		// Best-effort rollback so runtime and storage do not diverge.
+		_ = a.engine.ResumeWorkflow(req.ID)
+		respond(w, guapi.Error("workflow not paused: paused flag could not be saved: "+err.Error()))
+		return
+	}
+	respond(w, guapi.SuccessWithData("workflow paused", map[string]any{
+		"workflow": workflowToJSON(workflow),
+		"status":   "paused",
+	}))
+}
+
+// workflowResume reopens the delivery gate and clears the persisted paused
+// flag after the engine accepts the transition.
+func (a *Api) workflowResume(w http.ResponseWriter, r *http.Request) {
+	var req idRequest
+	if err := bindJSON(r, &req); err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	if a.engine == nil {
+		respond(w, guapi.Error("workflow engine not available"))
+		return
+	}
+	workflow, err := a.store.WorkflowFindByID(r.Context(), req.ID)
+	if err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	if workflow == nil {
+		respond(w, guapi.Error("workflow not found"))
+		return
+	}
+	if err := a.engine.ResumeWorkflow(req.ID); err != nil {
+		respond(w, guapi.Error(err.Error()))
+		return
+	}
+	workflow.SetPaused(false)
+	if err := a.store.WorkflowUpdate(r.Context(), workflow); err != nil {
+		respond(w, guapi.Error("workflow resumed but paused flag could not be cleared: "+err.Error()))
+		return
+	}
+	respond(w, guapi.SuccessWithData("workflow resumed", map[string]any{
+		"workflow": workflowToJSON(workflow),
+		"status":   "running",
 	}))
 }
 
@@ -197,9 +277,13 @@ func (a *Api) workflowStatus(w http.ResponseWriter, r *http.Request) {
 		if workflow.GetDeployed() {
 			status = "running"
 		}
+		if workflow.GetDeployed() && workflow.GetPaused() {
+			status = "paused"
+		}
 		respond(w, guapi.SuccessWithData("workflow status retrieved", map[string]any{
 			"status":   status,
 			"deployed": workflow.GetDeployed(),
+			"paused":   workflow.GetPaused(),
 		}))
 		return
 	}
@@ -211,6 +295,7 @@ func (a *Api) workflowStatus(w http.ResponseWriter, r *http.Request) {
 		"last_seq":  lastSeq,
 		"runner_id": a.engine.LeaseRunner(req.ID),
 		"deployed":  workflow.GetDeployed(),
+		"paused":    workflow.GetPaused(),
 	}))
 }
 

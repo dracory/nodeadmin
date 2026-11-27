@@ -20,6 +20,7 @@ type workflowJSON struct {
 	Edges       []edgeJSON     `json:"edges"`
 	View        map[string]any `json:"view,omitempty"`
 	Deployed    bool           `json:"deployed,omitempty"`
+	Paused      bool           `json:"paused,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
@@ -54,6 +55,7 @@ func workflowToJSON(wf nodestore.WorkflowInterface) workflowJSON {
 		Edges:       []edgeJSON{},
 		View:        wf.GetView(),
 		Deployed:    wf.GetDeployed(),
+		Paused:      wf.GetPaused(),
 		CreatedAt:   wf.GetCreatedAt(),
 		UpdatedAt:   wf.GetUpdatedAt(),
 	}
@@ -85,7 +87,8 @@ func workflowFromJSON(j workflowJSON) (nodestore.WorkflowInterface, error) {
 	wf := nodestore.NewWorkflow(j.Name).
 		SetDescription(j.Description).
 		SetView(j.View).
-		SetDeployed(j.Deployed)
+		SetDeployed(j.Deployed).
+		SetPaused(j.Paused)
 	if j.ID != "" {
 		wf.SetID(j.ID)
 	}
@@ -201,6 +204,8 @@ func (a *Api) updateWorkflow(w http.ResponseWriter, r *http.Request) {
 	// does not carry it, so trusting j.Deployed here would silently
 	// clear the flag on every save and break boot-time resume.
 	wf.SetDeployed(existing.GetDeployed())
+	// Paused is likewise server-managed; editor saves must not clear it.
+	wf.SetPaused(existing.GetPaused())
 	// Credential extraction BEFORE update: the previously stored map
 	// preserves values the editor sent back as sentinels or omitted;
 	// the stored nodes keep only sentinel markers.

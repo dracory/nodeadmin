@@ -735,6 +735,10 @@
                           title="Runner holding this workflow's lease">
                         <i class="fas fa-server me-1"></i>{{ runnerId }}
                     </span>
+                    <span v-if="paused" class="badge bg-warning text-dark me-2 align-middle"
+                          title="Delivery paused; new trigger output is queued">
+                        <i class="fas fa-pause me-1"></i>Paused
+                    </span>
                     <button class="btn btn-primary me-2" :disabled="!selectedWorkflow"
                             @click="openAddNodeModal" title="Add node">
                         <i class="fas fa-plus"></i>
@@ -748,6 +752,10 @@
                         <i class="fas fa-rocket"></i>
                     </button>
                     <div v-else class="btn-group ms-2">
+                        <button class="btn btn-warning" @click="paused ? resumeWorkflow() : pauseWorkflow()"
+                                :title="paused ? 'Resume — drain queued deliveries' : 'Pause — stop new deliveries without losing messages'">
+                            <i class="fas" :class="paused ? 'fa-play' : 'fa-pause'"></i>
+                        </button>
                         <button class="btn btn-danger" @click="stopWorkflow" title="Undeploy — deactivate the workflow, triggers stop listening">
                             <i class="fas fa-stop"></i>
                         </button>

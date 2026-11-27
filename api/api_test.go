@@ -140,6 +140,20 @@ func (f *fakeEngine) GetWorkflowStatus(workflowID string) (string, error) {
 	return "stopped", nil
 }
 
+func (f *fakeEngine) PauseWorkflow(workflowID string) error {
+	if !f.deployed[workflowID] {
+		return errors.New("workflow is not running")
+	}
+	return nil
+}
+
+func (f *fakeEngine) ResumeWorkflow(workflowID string) error {
+	if !f.deployed[workflowID] {
+		return errors.New("workflow is not running")
+	}
+	return nil
+}
+
 func (f *fakeEngine) FireInjectNode(workflowID, nodeID string) error {
 	f.fired = append(f.fired, workflowID+"/"+nodeID)
 	return nil

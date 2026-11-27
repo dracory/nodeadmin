@@ -482,3 +482,54 @@ func TestGetAuthUserIDOnlyLeavesEngineOpen(t *testing.T) {
 		t.Fatal("GetAuthUserID alone must not install an engine HTTPAuthenticator")
 	}
 }
+
+// TestWorkflowPauseResumeEndpoints proves the API composes the engine
+// transition with the persisted nodestore flag: pause survives as entity
+// state, status exposes the third runtime state, and resume clears it.
+func TestWorkflowPauseResumeEndpoints(t *testing.T) {
+	admin, engine, store := newEngineTestAdmin(t)
+	wf := nodestore.NewWorkflow("wf-pause-api").SetID("wf-pause-api").SetNodes([]nodestore.NodeInterface{
+		nodestore.NewNode("inj", "inject").SetData(map[string]interface{}{"interval": 3600}),
+		nodestore.NewNode("dbg", "debug").SetData(map[string]interface{}{}),
+	}).SetEdges([]nodestore.EdgeInterface{
+		nodestore.NewEdge("e1", "inj", "dbg"),
+	})
+	if err := store.WorkflowCreate(context.Background(), wf); err != nil {
+		t.Fatalf("workflow create: %v", err)
+	}
+
+	env := postAPI(t, admin, "/api/workflow-start", map[string]interface{}{"id": "wf-pause-api"})
+	apiData(t, env, "/api/workflow-start")
+
+	env = postAPI(t, admin, "/api/workflow-pause", map[string]interface{}{"id": "wf-pause-api"})
+	data := apiData(t, env, "/api/workflow-pause")
+	if data["status"] != "paused" {
+		t.Fatalf("pause response status = %v", data["status"])
+	}
+	if status, _ := engine.GetWorkflowStatus("wf-pause-api"); status != "paused" {
+		t.Fatalf("engine status after pause = %q", status)
+	}
+	stored, err := store.WorkflowFindByID(context.Background(), "wf-pause-api")
+	if err != nil || !stored.GetPaused() {
+		t.Fatalf("paused flag not persisted: stored=%v err=%v", stored, err)
+	}
+
+	env = postAPI(t, admin, "/api/workflow-status", map[string]interface{}{"id": "wf-pause-api"})
+	data = apiData(t, env, "/api/workflow-status")
+	if data["status"] != "paused" || data["paused"] != true {
+		t.Fatalf("status payload = %v", data)
+	}
+
+	env = postAPI(t, admin, "/api/workflow-resume", map[string]interface{}{"id": "wf-pause-api"})
+	data = apiData(t, env, "/api/workflow-resume")
+	if data["status"] != "running" {
+		t.Fatalf("resume response status = %v", data["status"])
+	}
+	if status, _ := engine.GetWorkflowStatus("wf-pause-api"); status != "running" {
+		t.Fatalf("engine status after resume = %q", status)
+	}
+	stored, err = store.WorkflowFindByID(context.Background(), "wf-pause-api")
+	if err != nil || stored.GetPaused() {
+		t.Fatalf("paused flag not cleared: stored=%v err=%v", stored, err)
+	}
+}
