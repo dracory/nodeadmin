@@ -149,6 +149,19 @@ func New(opts Options) (Interface, error) {
 			}
 		}
 	}
+	// Distributed wait/notify coordination: the same shared DB stores
+	// atomic signal counts and parked message envelopes. A caller-supplied
+	// CoordinationStore wins; when wiring fails the nodes fail explicitly
+	// rather than degrading to process-local memory.
+	if engine, ok := opts.Engine.(*noderunner.WorkflowEngine); ok && engine.CoordinationStore == nil {
+		if sqlDB := opts.Store.GetEntityStore().GetDB(); sqlDB != nil {
+			if coordinationStore, err := noderunner.NewNeatCoordinationStore(sqlDB); err == nil {
+				engine.CoordinationStore = coordinationStore
+			} else {
+				log.Printf("nodeadmin: coordination store unavailable (wait/notify disabled): %v", err)
+			}
+		}
+	}
 	// Persistent function-node context (node/flow/global scopes): the
 	// same entity DB stores serialized context values. A caller-supplied
 	// ContextStore wins — like the inbox and lease stores — and stores

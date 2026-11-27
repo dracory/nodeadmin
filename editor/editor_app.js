@@ -979,6 +979,8 @@ function initEditorApp() {
                     rbe:         { inputs: 1, outputs: 1, color: '#009688' },
                     function:    { inputs: 1, outputs: 1, color: '#FDD835' },
                     trigger:     { inputs: 1, outputs: 2, color: '#FF9800' },
+                    wait:        { inputs: 1, outputs: 2, color: '#FF9800' },
+                    notify:      { inputs: 1, outputs: 1, color: '#FF9800' },
                     template:    { inputs: 1, outputs: 1, color: '#9C27B0' },
                     json:        { inputs: 1, outputs: 2, color: '#607D8B' },
                     yaml:        { inputs: 1, outputs: 2, color: '#607D8B' },
