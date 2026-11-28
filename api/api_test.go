@@ -886,3 +886,38 @@ func TestChildFlowExportImportRoundTrip(t *testing.T) {
 	})
 	apiData(t, env, "/api/child-flow-import")
 }
+
+func TestStructuredConfigSchemasAreServed(t *testing.T) {
+	a := New(newTestStore(t), nil)
+
+	fetchProperties := func(nodeType string) map[string]interface{} {
+		env, _ := postAPI(t, a, "/api/node-schema-fetch", map[string]interface{}{"type": nodeType})
+		schema, _ := apiData(t, env, "/api/node-schema-fetch")["schema"].(map[string]interface{})
+		properties, _ := schema["properties"].(map[string]interface{})
+		if properties == nil {
+			t.Fatalf("%s schema has no properties: %v", nodeType, schema)
+		}
+		return properties
+	}
+
+	for _, nodeType := range []string{"httpRequest", "httpResponse"} {
+		headers, _ := fetchProperties(nodeType)["headers"].(map[string]interface{})
+		if headers["format"] != "keyvalue" {
+			t.Fatalf("%s headers should use the key/value editor: %v", nodeType, headers)
+		}
+	}
+
+	checkpointRoutes, _ := fetchProperties("checkpoint")["routes"].(map[string]interface{})
+	if checkpointRoutes["type"] != "string" || checkpointRoutes["default"] != "approve, decline" {
+		t.Fatalf("checkpoint routes should edit as comma-separated text: %v", checkpointRoutes)
+	}
+
+	formFields, _ := fetchProperties("uiForm")["fields"].(map[string]interface{})
+	items, _ := formFields["items"].(map[string]interface{})
+	itemProperties, _ := items["properties"].(map[string]interface{})
+	for _, key := range []string{"name", "label", "type", "options", "value"} {
+		if itemProperties[key] == nil {
+			t.Fatalf("uiForm fields row missing %q: %v", key, itemProperties)
+		}
+	}
+}
