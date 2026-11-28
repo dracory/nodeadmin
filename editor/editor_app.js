@@ -3048,6 +3048,7 @@ function initEditorApp() {
              */
             schemaFieldType(prop) {
                 if (prop && (Array.isArray(prop.enum) || Array.isArray(prop.options))) return 'select';
+                if (prop && prop.format === 'keyvalue') return 'keyvalue';
                 if (prop && prop.format === 'typedinput') return 'typedinput';
                 // format:"credential" is masked in the form and stripped
                 // from exported flow documents.
@@ -3198,6 +3199,11 @@ function initEditorApp() {
                         field = 'nodeselect';
                         options = this.linkPeerNodes(prop.peerType);
                         value = value == null ? '' : String(value);
+                    } else if (field === 'keyvalue') {
+                        // Key/value editor: objects edit as rows in the
+                        // modal and are converted back to an object on save.
+                        const obj = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+                        value = Object.keys(obj).map(k => ({ key: k, value: obj[k] }));
                     } else if (field === 'items') {
                         // Node-RED-style row editor: each array element
                         // is an object whose sub-fields render inline.
@@ -3257,6 +3263,13 @@ function initEditorApp() {
              * rules-list pattern: switch rules, change rules, inject
              * props).
              */
+            addKeyValueRow(field) {
+                if (!Array.isArray(this.editingNodeForm[field.key])) {
+                    this.editingNodeForm[field.key] = [];
+                }
+                this.editingNodeForm[field.key].push({ key: '', value: '' });
+            },
+
             addItemRow(field) {
                 if (!Array.isArray(this.editingNodeForm[field.key])) {
                     this.editingNodeForm[field.key] = [];
@@ -3467,7 +3480,14 @@ function initEditorApp() {
                     });
                     for (const f of this.editingNodeSchemaFields) {
                         let v = this.editingNodeForm[f.key];
-                        if (f.field === 'json') {
+                        if (f.field === 'keyvalue') {
+                            const obj = {};
+                            (Array.isArray(v) ? v : []).forEach(row => {
+                                const key = String((row && row.key) || '').trim();
+                                if (key) obj[key] = row.value === undefined || row.value === null ? '' : row.value;
+                            });
+                            v = obj;
+                        } else if (f.field === 'json') {
                             if (v === '' || v === undefined) { v = {}; }
                             else {
                                 try { v = JSON.parse(v); }

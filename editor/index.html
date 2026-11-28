@@ -1237,6 +1237,24 @@
                                     :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
                                 <option v-for="opt in field.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
+                            <!-- Key/value object editor (HTTP headers and
+                                 similar maps). Rows convert back to an object
+                                 on save; blank names are ignored. -->
+                            <div v-else-if="field.field === 'keyvalue'" class="border rounded p-2">
+                                <div v-if="!editingNodeForm[field.key] || !editingNodeForm[field.key].length"
+                                     class="text-muted small mb-2">No entries — add one below.</div>
+                                <div v-for="(row, i) in editingNodeForm[field.key]" :key="i"
+                                     class="d-flex align-items-center gap-1 mb-2 pb-2 border-bottom">
+                                    <input type="text" class="form-control form-control-sm" style="max-width: 220px;"
+                                           placeholder="Name" v-model="row.key">
+                                    <input type="text" class="form-control form-control-sm flex-fill"
+                                           placeholder="Value" v-model="row.value">
+                                    <button type="button" class="btn btn-sm btn-outline-danger px-2"
+                                            @click="removeItemRow(field, i)" title="Remove">&times;</button>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        @click="addKeyValueRow(field)">+ Add</button>
+                            </div>
                             <!-- Node-RED-style list editor: one row per
                                  item, sub-fields inline (rules, props) -->
                             <div v-else-if="field.field === 'items'" class="border rounded p-2">

@@ -307,3 +307,103 @@ func TestEditorPaletteGrouping(t *testing.T) {
 		t.Fatalf("console errors on editor: %v", errs)
 	}
 }
+
+// TestEditorKeyValueAndFormRows covers the replacements for the last
+// user-facing raw-JSON config shapes: objects edit as key/value rows
+// and array objects edit as object rows. Schema-shaped fixtures keep
+// this editor conversion test independent of nodebase release ordering;
+// nodebase's own schema tests cover the concrete node registrations.
+func TestEditorKeyValueAndFormRows(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-keyvalue-rows.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	created := apiPost(t, srv.srv.URL, "/api/workflow-create",
+		map[string]any{"name": "E2E KeyValue Rows", "nodes": []any{}, "edges": []any{}})
+	wf, _ := created["workflow"].(map[string]any)
+	require.NotNil(t, wf)
+	id, _ := wf["id"].(string)
+	require.NotEmpty(t, id)
+
+	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor&workflow="+id))
+	waitVueApp(t, page)
+	vm := `document.getElementById('app').__vue_app__._instance.proxy`
+	waitExpr(t, page,
+		`(function(){ const vm = `+vm+`; return vm.selectedWorkflow && String(vm.selectedWorkflow.id) === `+js(id)+`; })()`,
+		"workflow to be selected")
+
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		window.e2eHttpNode = vm.addNode('httpRequest', 'httpRequest', 140, 140);
+		const schema = { type: 'object', properties: {
+			headers: { type: 'object', format: 'keyvalue', title: 'Headers' }
+		}};
+		const built = vm.buildSchemaFields(schema, {});
+		vm.editingNodeId = window.e2eHttpNode;
+		vm.editingNodeType = 'httpRequest';
+		vm.editingNodeName = 'HTTP request';
+		vm.editingNodeDisabled = false;
+		vm.editingNodeSchema = schema;
+		vm.editingNodeSchemaFields = built.fields;
+		vm.editingNodeForm = built.form;
+		bootstrap.Modal.getOrCreateInstance(vm.$refs.nodePropsModal).show();
+		return built.fields.some(f => f.key === 'headers' && f.field === 'keyvalue');
+	})()`, new(bool)))
+
+	var headers map[string]any
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		vm.editingNodeForm.headers = [
+			{ key: 'X-Test', value: 'yes' },
+			{ key: '', value: 'ignored' }
+		];
+		vm.saveNodeProperties();
+		return vm.editor.getNodeFromId(window.e2eHttpNode).data.headers;
+	})()`, &headers))
+	require.Equal(t, "yes", headers["X-Test"])
+	require.Len(t, headers, 1, "blank key/value names should be ignored")
+
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		window.e2eFormNode = vm.addNode('uiForm', 'uiForm', 340, 140);
+		const schema = { type: 'object', properties: {
+			fields: { type: 'array', title: 'Fields', items: { type: 'object', properties: {
+				name: { type: 'string', title: 'Name' },
+				type: { type: 'string', title: 'Type', enum: ['text', 'number', 'checkbox', 'select'], default: 'text' },
+				options: { type: 'string', title: 'Options', showWhen: { key: 'type', in: ['select'] } },
+				value: { type: 'string', title: 'Initial Value', format: 'typedinput', typeField: 'valueType', typedInputTypes: ['str', 'num', 'bool', 'json'], defaultType: 'str' }
+			}}}
+		}};
+		const built = vm.buildSchemaFields(schema, {});
+		vm.editingNodeId = window.e2eFormNode;
+		vm.editingNodeType = 'uiForm';
+		vm.editingNodeName = 'Form';
+		vm.editingNodeDisabled = false;
+		vm.editingNodeSchema = schema;
+		vm.editingNodeSchemaFields = built.fields;
+		vm.editingNodeForm = built.form;
+		bootstrap.Modal.getOrCreateInstance(vm.$refs.nodePropsModal).show();
+		return built.fields.some(f => f.key === 'fields' && f.field === 'items');
+	})()`, new(bool)))
+	waitExpr(t, page,
+		`document.querySelector('#nodePropsModal').innerText.includes('Fields')`,
+		"uiForm modal row editor")
+
+	var fields []map[string]any
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		vm.editingNodeForm.fields = [
+			{ name: 'colour', label: 'Colour', type: 'select', options: 'red, green', value: 'green', valueType: 'str' }
+		];
+		vm.saveNodeProperties();
+		return vm.editor.getNodeFromId(window.e2eFormNode).data.fields;
+	})()`, &fields))
+	require.Len(t, fields, 1)
+	require.Equal(t, "colour", fields[0]["name"])
+	require.Equal(t, "select", fields[0]["type"])
+	require.Equal(t, "red, green", fields[0]["options"])
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
