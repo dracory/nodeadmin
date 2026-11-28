@@ -530,6 +530,23 @@ func TestNodeTypesAndSchema(t *testing.T) {
 	apiError(t, env, "unknown schema")
 }
 
+func TestQueueSchemaIsServedForEditorForm(t *testing.T) {
+	a := New(newTestStore(t), nil)
+
+	env, _ := postAPI(t, a, "/api/node-schema-fetch", map[string]interface{}{"type": "queue"})
+	schema, _ := apiData(t, env, "/api/node-schema-fetch")["schema"].(map[string]interface{})
+	properties, _ := schema["properties"].(map[string]interface{})
+	for _, key := range []string{"capacity", "policy", "hold", "backend", "dir", "password", "keyFile", "hostKey"} {
+		if properties[key] == nil {
+			t.Fatalf("queue schema missing %q property: %v", key, properties)
+		}
+	}
+	backend, _ := properties["backend"].(map[string]interface{})
+	if backend["enum"] == nil {
+		t.Fatalf("queue backend should expose enum options for the schema-driven editor: %v", backend)
+	}
+}
+
 func TestNodeInject(t *testing.T) {
 	engine := newFakeEngine()
 	a := New(newTestStore(t), engine)

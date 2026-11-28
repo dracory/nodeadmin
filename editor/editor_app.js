@@ -79,6 +79,7 @@ function initEditorApp() {
                 editingNodeData: '{}',
                 editingNodeDataError: '',
                 editingNodeSchema: null, // fetched JSON schema for the editing node's type (null = JSON fallback)
+                editingNodeSchemaLoading: false, // schema fetch in flight — show a loading state instead of flashing raw JSON
                 editingNodeSchemaFields: [], // normalized [{key, title, description, field, required, options}]
                 editingNodeForm: {}, // form values keyed by schema property name
                 editingNodeFormErrors: {},
@@ -3048,6 +3049,9 @@ function initEditorApp() {
             schemaFieldType(prop) {
                 if (prop && (Array.isArray(prop.enum) || Array.isArray(prop.options))) return 'select';
                 if (prop && prop.format === 'typedinput') return 'typedinput';
+                // format:"credential" is masked in the form and stripped
+                // from exported flow documents.
+                if (prop && prop.format === 'credential') return 'credential';
                 // format:"code" — vendored CodeMirror editor with a
                 // textarea fallback when the bundle did not load.
                 if (prop && prop.format === 'code') return 'code';
@@ -3406,6 +3410,7 @@ function initEditorApp() {
                 this.editingNodeData = JSON.stringify(node.data, null, 2);
                 this.editingNodeDataError = '';
                 this.editingNodeSchema = null;
+                this.editingNodeSchemaLoading = true;
                 this.editingNodeSchemaFields = [];
                 this.editingNodeForm = {};
                 this.editingNodeFormErrors = {};
@@ -3421,6 +3426,7 @@ function initEditorApp() {
                 // on failure the modal falls back to the raw JSON textarea.
                 this.api('/api/node-schema-fetch', { type: this.editingNodeType })
                     .then(data => {
+                        this.editingNodeSchemaLoading = false;
                         if (!data || !data.schema || !data.schema.properties) return;
                         this.editingNodeSchema = data.schema;
                         const built = this.buildSchemaFields(data.schema, node.data || {});
@@ -3428,7 +3434,15 @@ function initEditorApp() {
                         this.editingNodeForm = built.form;
                         this.initCodeEditors();
                     })
-                    .catch(() => { /* keep JSON fallback */ });
+                    .catch(err => {
+                        this.editingNodeSchemaLoading = false;
+                        // Nodes without a schema legitimately use the raw
+                        // JSON fallback, but a registered schema that fails
+                        // to fetch or normalize must be visible in the
+                        // browser console instead of silently looking like
+                        // a missing schema.
+                        console.warn('node schema form unavailable; using JSON fallback', err);
+                    });
             },
 
             /**

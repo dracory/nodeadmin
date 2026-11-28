@@ -125,6 +125,51 @@ func TestEditorEndpointPreviewUsesMountedPath(t *testing.T) {
 	}
 }
 
+// TestEditorQueueSchemaForm covers the schema-driven properties form
+// for the queue node: the modal must render Capacity, Overflow Policy
+// and Storage Backend fields instead of dropping to the raw JSON
+// fallback. Raw JSON is for genuinely schema-less/custom nodes.
+func TestEditorQueueSchemaForm(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-queue-schema.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	created := apiPost(t, srv.srv.URL, "/api/workflow-create",
+		map[string]any{"name": "E2E Queue Schema", "nodes": []any{}, "edges": []any{}})
+	wf, _ := created["workflow"].(map[string]any)
+	require.NotNil(t, wf)
+	id, _ := wf["id"].(string)
+	require.NotEmpty(t, id)
+
+	page, w := mustPage(t, browser, srv.browserURL("/?controller=editor&workflow="+id))
+	waitVueApp(t, page)
+	vm := `document.getElementById('app').__vue_app__._instance.proxy`
+	waitExpr(t, page,
+		`(function(){ const vm = `+vm+`; return vm.selectedWorkflow && String(vm.selectedWorkflow.id) === `+js(id)+`; })()`,
+		"workflow to be selected")
+
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		const nodeId = vm.addNode('queue', 'queue', 140, 140);
+		vm.openNodeProperties(nodeId);
+		return true;
+	})()`, new(bool)))
+	waitExpr(t, page,
+		`(function(){ const vm = `+vm+`; return vm.editingNodeSchema && vm.editingNodeSchemaFields.some(f => f.key === 'backend'); })()`,
+		"queue schema form fields")
+
+	require.True(t, evalBool(t, page, `document.querySelector('#nodePropsModal').innerText.includes('Overflow Policy')`),
+		"queue modal should show the Overflow Policy field")
+	require.True(t, evalBool(t, page, `document.querySelector('#nodePropsModal').innerText.includes('Storage Backend')`),
+		"queue modal should show the Storage Backend field")
+	require.False(t, evalBool(t, page, `document.querySelector('#nodePropsModal').innerText.includes('Data (JSON)')`),
+		"queue modal must not fall back to raw JSON when its schema is registered")
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
+
 // TestEditorEmptyState covers the welcome screen:
 // with no workflow selected the editor workspace (tabs, toolbar,
 // canvas) is hidden and the welcome screen fills the pane instead.

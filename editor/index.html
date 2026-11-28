@@ -1343,9 +1343,15 @@
                             <div class="invalid-feedback">{{ editingNodeFormErrors[field.key] }}</div>
                         </div>
                     </template>
+                    <div v-else-if="editingNodeSchemaLoading" class="py-4 text-center text-muted">
+                        Loading node options…
+                    </div>
                     <!-- Fallback: raw JSON editing when no schema is available -->
                     <div v-else class="mb-0">
                         <label class="form-label">Data (JSON)</label>
+                        <small class="form-text text-warning d-block mb-1">
+                            Schema-driven form unavailable; edit the raw configuration JSON. Check the browser console for details.
+                        </small>
                         <textarea class="form-control font-monospace" rows="6" v-model="editingNodeData"
                                   :class="{ 'is-invalid': editingNodeDataError }"></textarea>
                         <div class="invalid-feedback">{{ editingNodeDataError }}</div>
