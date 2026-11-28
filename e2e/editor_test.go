@@ -87,6 +87,44 @@ func TestEditorCreateSavePersist(t *testing.T) {
 	}
 }
 
+// TestEditorEndpointPreviewUsesMountedPath covers the listener-node
+// endpoint preview: when the editor is browsed beneath /admin/nodes,
+// a main-listener path such as /trigger previews the full external URL
+// /admin/nodes/trigger rather than the site-root /trigger.
+func TestEditorEndpointPreviewUsesMountedPath(t *testing.T) {
+	srv := newTestServer(t, t.TempDir()+"/e2e-endpoint-preview.db")
+	defer srv.close()
+	browser := newBrowser(t)
+
+	page, w := mustPage(t, browser, srv.browserURL("/admin/nodes?controller=editor"))
+	waitVueApp(t, page)
+	vm := `document.getElementById('app').__vue_app__._instance.proxy`
+
+	var result map[string]any
+	require.NoError(t, eval(page, `(function(){
+		const vm = `+vm+`;
+		vm.editingNodeType = 'httpTrigger';
+		vm.editingNodeForm = { path: '/trigger', listener: 'main', port: 8081 };
+		const main = vm.endpointPreview({ key: 'path' });
+		vm.editingNodeForm = { path: '/trigger', listener: 'own', port: 8081 };
+		const own = vm.endpointPreview({ key: 'path' });
+		return { origin: window.location.origin, main: main, own: own };
+	})()`, &result))
+
+	origin, _ := result["origin"].(string)
+	main, _ := result["main"].(map[string]any)
+	own, _ := result["own"].(map[string]any)
+	require.NotEmpty(t, origin)
+	require.Equal(t, "Full endpoint on the main application listener", main["label"])
+	require.Equal(t, origin+"/admin/nodes/trigger", main["url"])
+	require.Equal(t, "Full endpoint on the dedicated listener", own["label"])
+	require.Contains(t, own["url"], ":8081/trigger")
+
+	if errs := w.errors(); len(errs) > 0 {
+		t.Fatalf("console errors on editor: %v", errs)
+	}
+}
+
 // TestEditorEmptyState covers the welcome screen:
 // with no workflow selected the editor workspace (tabs, toolbar,
 // canvas) is hidden and the welcome screen fills the pane instead.

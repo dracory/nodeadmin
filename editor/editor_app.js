@@ -3285,6 +3285,35 @@ function initEditorApp() {
                 return opt ? opt.label : (v === '' || v === undefined ? '— select —' : String(v));
             },
 
+            /**
+             * Effective HTTP endpoint preview for listener nodes. The
+             * browser URL is the external nodeadmin mount even when the
+             * host strip-prefixes requests internally, so it is the
+             * correct base for listener:"main" endpoints.
+             */
+            endpointPreview(field) {
+                if (!field || field.key !== 'path') return null;
+                if (['httpTrigger', 'submitIn'].indexOf(this.editingNodeType) === -1) return null;
+                let path = String(this.editingNodeForm.path || '').trim();
+                if (!path) return null;
+                if (path[0] !== '/') path = '/' + path;
+
+                const listener = this.editingNodeForm.listener || 'own';
+                if (listener === 'main') {
+                    const mount = String(window.location.pathname || '/').replace(/\/+$/, '');
+                    return {
+                        label: 'Full endpoint on the main application listener',
+                        url: window.location.origin + mount + path
+                    };
+                }
+
+                const port = Number(this.editingNodeForm.port) || 8081;
+                return {
+                    label: 'Full endpoint on the dedicated listener',
+                    url: window.location.protocol + '//' + window.location.hostname + ':' + port + path
+                };
+            },
+
             schemaFieldVisible(field) {
                 if (!field || !field.showIf) return true;
                 return Object.keys(field.showIf).every(k =>

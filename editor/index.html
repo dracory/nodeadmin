@@ -1335,6 +1335,9 @@
                             <input v-else type="text" class="form-control"
                                    v-model="editingNodeForm[field.key]"
                                    :class="{ 'is-invalid': editingNodeFormErrors[field.key] }">
+                            <small v-if="endpointPreview(field)" class="form-text text-info d-block">
+                                {{ endpointPreview(field).label }}: <code>{{ endpointPreview(field).url }}</code>
+                            </small>
                             <small v-if="field.description && (field.field !== 'code' || codeTabActive(field))"
                                    class="form-text text-muted">{{ field.description }}</small>
                             <div class="invalid-feedback">{{ editingNodeFormErrors[field.key] }}</div>
